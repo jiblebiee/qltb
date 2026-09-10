@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <link rel="icon" href="/static/images/favicon.ico">
+  <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/static/images/apple-touch-icon-120x120.png">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quản Lý Tài Khoản</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <link rel="stylesheet" href="/static/css/createuser.css" />
+</head>
+<body>
+  <div class="top-right">
+    <a id="btn-back" class="icon-link" href="/modules" title="Quay lại" aria-label="Quay lại">
+      <img src="/static/images/back.png" alt="Quay lại" class="icon-img">
+    </a>
+    <a id="btn-logout" class="icon-link danger" href="/logout" title="Đăng xuất" aria-label="Đăng xuất">
+      <img src="/static/images/icon.png" alt="Đăng xuất" class="icon-img">
+    </a>
+  </div>
+
+  <div class="container account-page">
+    <div class="header header-center account-header">
+      <div class="brand">
+        <div class="brand-title">
+          <img class="brand-logo" src="/static/images/logo.png" alt="logo">
+          <h1>Quản Lý Tài Khoản</h1>
+        </div>
+      </div>
+    </div>
+
+    <section id="tab-users" class="card account-shell" style="display:block">
+      <div class="toolbar account-toolbar"></div>
+
+      <div class="card user-block account-create-block">
+        <div class="block-head section-divider"></div>
+
+        <div class="user-create">
+          <div class="card user-card form-card">
+            <div class="section-title-wrap section-divider compact-divider">
+              <div>
+                <div class="section-label"><span class="section-icon">TT</span><span>Thông tin</span></div>
+                <h3>Thông tin đăng nhập</h3>
+              </div>
+            </div>
+            <div class="form">
+              <div class="field">
+                <label>Tên đăng nhập</label>
+                <input id="u_username" placeholder="Ví dụ: user.it01" />
+              </div>
+              <div class="field">
+                <label>Mật khẩu</label>
+                <input id="u_password" type="password" placeholder="Tối đa 72 ký tự" />
+              </div>
+              <div class="field">
+                <label>Họ tên</label>
+                <input id="u_fullname" placeholder="Nguyễn Văn A" />
+              </div>
+              <div class="field">
+                <label>Trạng thái</label>
+                <select id="u_active">
+                  <option value="true">Kích hoạt</option>
+                  <option value="false">Bị khóa</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card user-card permission-card">
+            <div class="section-title-wrap section-divider compact-divider">
+              <div>
+                <div class="section-label"><span class="section-icon">PQ</span><span>Phân quyền</span></div>
+              </div>
+            </div>
+            <div id="create_permission_groups"></div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" onclick="createUser()">Tạo tài khoản</button>
+        </div>
+      </div>
+
+      <div id="editUserModal" class="modal" style="display:none">
+        <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <div class="modal-title">Cập nhật tài khoản</div>
+            <button class="icon-btn" type="button" onclick="closeEditUser()">x</button>
+          </div>
+          <div class="form">
+            <div class="row cols-2">
+              <label>Tài khoản
+                <input id="eu_username" readonly />
+              </label>
+              <label>Họ tên
+                <input id="eu_fullname" />
+              </label>
+            </div>
+            <div class="row cols-2">
+              <label>Trạng thái
+                <select id="eu_active">
+                  <option value="true">Kích hoạt</option>
+                  <option value="false">Bị khóa</option>
+                </select>
+              </label>
+            </div>
+            <label>Quyền truy cập</label>
+            <div id="edit_permission_groups"></div>
+            <div class="row" style="justify-content:flex-end; gap:10px; margin-top:10px;">
+              <button class="btn" type="button" onclick="closeEditUser()">Hủy</button>
+              <button class="btn primary" type="button" onclick="saveEditUser()">Cập nhật</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="pwdModal" class="modal" style="display:none">
+        <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <div class="modal-title">Đổi mật khẩu</div>
+            <button class="icon-btn" type="button" onclick="closeChangePassword()">x</button>
+          </div>
+          <div class="form">
+            <label>Tài khoản
+              <input id="pw_username" readonly />
+            </label>
+            <label>Mật khẩu mới
+              <input id="pw_new" type="password" placeholder="Tối đa 72 ký tự" />
+            </label>
+            <label>Nhập lại mật khẩu
+              <input id="pw_confirm" type="password" placeholder="Xác nhận mật khẩu" />
+            </label>
+            <div class="row" style="justify-content:flex-end; gap:10px; margin-top:10px;">
+              <button class="btn" type="button" onclick="closeChangePassword()">Hủy</button>
+              <button class="btn primary" type="button" onclick="saveChangePassword()">Cập nhật</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="viewPermissionsModal" class="modal" style="display:none">
+        <div class="modal-inner modal-form permissions-view-modal" onclick="event.stopPropagation()">
+          <div class="modal-head">
+            <div class="modal-title">Quyền truy cập</div>
+            <button class="icon-btn" type="button" onclick="closePermissionsModal()">x</button>
+          </div>
+          <div class="form">
+            <label>Tài khoản
+              <input id="vp_username" readonly />
+            </label>
+            <div id="vp_permissions" class="permissions-modal-body"></div>
+            <div class="row" style="justify-content:flex-end; gap:10px; margin-top:10px;">
+              <button class="btn" type="button" onclick="closePermissionsModal()">Đóng</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card user-block user-list-block account-list-block">
+        <div class="block-head account-list-head section-divider">
+          <div>
+            <div class="section-label"><span class="section-icon">DS</span><span>Danh sách tài khoản</span></div>
+          </div>
+          <div class="user-list-tools">
+            <input id="users_filter" placeholder="Tìm theo username hoặc họ tên" />
+          </div>
+        </div>
+        <div id="users_list" class="list"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="account-footer-note">Powered by TruongHuuHau</div>
+  <div id="toast_container"></div>
+
+  <script src="/static/js/app.js"></script>
+  <script src="/static/js/createuser.js"></script>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Đăng nhập — Quản Lý Thiết Bị</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="/static/images/favicon.ico?v=5">
+  <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png?v=5">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+  <script>
+    try {
+      var t = localStorage.getItem('qltb-theme');
+      if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/static/css/app.css?v=5">
+</head>
+<body>
+<div class="auth">
+
+  <!-- ══════════════ cột trái: biểu mẫu ══════════════ -->
+  <section class="auth-form">
+    <div class="auth-inner">
+
+      <div class="wordmark">
+        <img class="on-light" src="/static/images/logo.png?v=5" alt="Alta Media" width="779" height="621">
+        <img class="on-dark"  src="/static/images/logo-dark.png?v=5" alt="Alta Media" width="779" height="621">
+        <em>Quản lý thiết bị · Phòng IT</em>
+      </div>
+
+      <h1>Chào mừng trở lại</h1>
+
+      <div class="auth-card">
+        {% if error %}
+        <div class="loginerr" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="/login" autocomplete="on" id="loginForm" novalidate>
+          <div class="field">
+            <label for="username">Tên đăng nhập</label>
+            <div class="inwrap">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+              <input id="username" name="username" autocomplete="username"
+                     autocapitalize="none" autocorrect="off" spellcheck="false"
+                     autofocus placeholder="Nhập tên tài khoản…">
+            </div>
+            <div class="fieldmsg" id="userMsg" hidden>Vui lòng nhập tên đăng nhập</div>
+          </div>
+
+          <div class="field">
+            <label for="password">Mật khẩu</label>
+            <div class="inwrap pwwrap">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="4" y="10" width="16" height="10" rx="2"/>
+                <path d="M8 10V7a4 4 0 018 0v3"/>
+              </svg>
+              <input id="password" name="password" type="password"
+                     autocomplete="current-password" placeholder="Nhập mật khẩu…">
+              <button class="eye" type="button" id="togglePw" aria-label="Hiện mật khẩu">
+                <svg id="eyeIcon" viewBox="0 0 24 24">
+                  <path d="M3 3l18 18"/>
+                  <path d="M10.6 6.1A9.6 9.6 0 0112 6c6.2 0 10 6 10 6a17 17 0 01-3.3 3.9"/>
+                  <path d="M6.6 6.9A16.4 16.4 0 002 12s3.8 6.5 10 6.5c1.6 0 3-.4 4.2-1"/>
+                  <path d="M9.9 9.9a3 3 0 004.2 4.2"/>
+                </svg>
+              </button>
+            </div>
+            <div class="fieldmsg" id="passMsg" hidden>Vui lòng nhập mật khẩu</div>
+          </div>
+
+          <label class="remember">
+            <input type="checkbox" name="remember" value="1" checked>
+            <span class="box"></span>
+            <span>Duy trì đăng nhập</span>
+          </label>
+
+          <button class="btn auth-go" type="submit">
+            Đăng nhập
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+        </form>
+      </div>
+
+      <p class="auth-foot">Quên mật khẩu? Liên hệ quản trị viên phòng IT.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════ cột phải: giới thiệu ══════════════ -->
+  <aside class="auth-show" aria-hidden="true">
+    <img class="show-logo" src="/static/images/mark.png?v=5" alt="" width="772" height="520">
+    <div class="show-stage">
+     <div class="mock-wrap">
+      <div class="mock">
+        <div class="mh">
+          Phòng IT · Quản lý tài sản
+          <span class="live">Trực tiếp</span>
+        </div>
+
+        <div class="board">
+          <div class="bgrid">
+            <div class="bu a"><b>01</b><i>Rảnh</i></div>
+            <div class="bu a"><b>02</b><i>Rảnh</i></div>
+            <div class="bu o"><b>03</b><i>An</i></div>
+            <div class="bu o"><b>04</b><i>An</i></div>
+            <div class="bu a"><b>05</b><i>Rảnh</i></div>
+            <div class="bu m"><b>06</b><i>Bảo trì</i></div>
+            <div class="bu o"><b>07</b><i>Bình</i></div>
+            <div class="bu b"><b>08</b><i>Hỏng</i></div>
+          </div>
+        </div>
+
+        <div class="who">
+          <span class="av">NA</span>
+          <div>
+            <b>Nguyễn Văn An</b>
+            <em>LAP-03 · LAP-04 · phiếu #07D0</em>
+          </div>
+          <span class="tick">
+            <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          </span>
+        </div>
+      </div>
+
+      <div class="chip-stat">
+        <div class="k">Đang cho mượn</div>
+        <div class="v">23<span>▲ 12%</span></div>
+        <div class="bars">
+          <i style="height:38%"></i><i style="height:58%"></i><i style="height:46%"></i>
+          <i style="height:78%"></i><i style="height:100%"></i>
+        </div>
+      </div>
+
+      <div class="chip-issue">
+        <span class="ic">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 4h14a1 1 0 011 1v15l-3-2-3 2-3-2-3 2-3-2V5a1 1 0 011-1z"/>
+            <path d="M8.5 9h7M8.5 13h4.5"/>
+          </svg>
+        </span>
+        <div>
+          <b>Phiếu #07D0 · 2 máy</b>
+          <em>Nguyễn Văn An · Kỹ thuật · mượn 05/09</em>
+        </div>
+      </div>
+     </div>
+    </div>
+
+    <div class="show-copy">
+      <h2>Quản lý thiết bị công nghệ thông tin của công ty trực quan, minh bạch, rõ ràng.</h2>
+
+      <div class="show-tiles">
+        <div><b>Thiết bị</b><em>Quản lý thiết bị phòng ban</em></div>
+        <div><b>Mượn - Trả</b><em>Quản lý mượn trả thiết bị của các phòng ban</em></div>
+        <div><b>Nhập / Xuất</b><em>Quản lý nhập hàng hoá, xuất bán hàng hoá</em></div>
+      </div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  (function () {
+    var form = document.getElementById('loginForm');
+    var user = document.getElementById('username');
+    var pass = document.getElementById('password');
+
+    // Tự kiểm tra thay vì dùng required, để thông báo hiện đúng chỗ và bằng tiếng Việt
+    function check(input, msgId) {
+      var ok = input.value.trim() !== '';
+      document.getElementById(msgId).hidden = ok;
+      return ok;
+    }
+    form.addEventListener('submit', function (e) {
+      var a = check(user, 'userMsg');
+      var b = check(pass, 'passMsg');
+      if (!a || !b) { e.preventDefault(); (a ? pass : user).focus(); }
+    });
+    user.addEventListener('input', function () {
+      if (user.value.trim()) document.getElementById('userMsg').hidden = true;
+    });
+    pass.addEventListener('input', function () {
+      if (pass.value.trim()) document.getElementById('passMsg').hidden = true;
+    });
+
+    var EYE_OPEN = '<path d="M2 12s3.8-6.5 10-6.5S22 12 22 12s-3.8 6.5-10 6.5S2 12 2 12z"/>'
+      + '<circle cx="12" cy="12" r="3"/>';
+    var EYE_OFF = '<path d="M3 3l18 18"/>'
+      + '<path d="M10.6 6.1A9.6 9.6 0 0112 6c6.2 0 10 6 10 6a17 17 0 01-3.3 3.9"/>'
+      + '<path d="M6.6 6.9A16.4 16.4 0 002 12s3.8 6.5 10 6.5c1.6 0 3-.4 4.2-1"/>'
+      + '<path d="M9.9 9.9a3 3 0 004.2 4.2"/>';
+
+    document.getElementById('togglePw').addEventListener('click', function () {
+      var show = pass.type === 'password';
+      pass.type = show ? 'text' : 'password';
+      this.setAttribute('aria-label', show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+      document.getElementById('eyeIcon').innerHTML = show ? EYE_OPEN : EYE_OFF;
+      pass.focus();
+    });
+  })();
+</script>
+</body>
+</html>

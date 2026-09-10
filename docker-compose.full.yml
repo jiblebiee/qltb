@@ -1,0 +1,102 @@
+# Trọn gói cho MỘT MÁY MỚI: ứng dụng + MySQL + MinIO.
+# Dùng khi máy chưa có sẵn database và kho ảnh.
+#
+#   docker compose -f docker-compose.full.yml up -d
+#
+# Nếu công ty đã có MySQL và S3 riêng thì dùng docker-compose.yml thay cho file này.
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?thiếu MYSQL_ROOT_PASSWORD trong .env}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-it_qltb}
+      MYSQL_USER: ${MYSQL_USER:-qltb}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?thiếu MYSQL_PASSWORD trong .env}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      # Chờ MySQL thật sự nhận lệnh, không chỉ chờ cổng mở
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    logging: &log
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      # Dùng tên riêng chứ không lấy AWS_*: nếu người cài đã export AWS_* trong
+      # shell (hay dùng AWS CLI) thì shell sẽ đè lên .env, MinIO nhận một khoá
+      # còn ứng dụng nhận khoá khác, và mọi lần tải ảnh đều 403.
+      # setup.sh ghi hai dòng này TRÙNG với AWS_ACCESS_KEY_ID/SECRET trong .env.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?thiếu MINIO_ROOT_USER trong .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?thiếu MINIO_ROOT_PASSWORD trong .env}
+      # Trình duyệt PUT ảnh từ origin của ứng dụng sang cổng 9000 — khác origin,
+      # nên MinIO phải cho phép CORS thì trình duyệt mới gửi được.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ORIGIN:-*}
+    ports:
+      # 9000 là cổng API. Trình duyệt PUT thẳng ảnh lên đây nên BẮT BUỘC mở.
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    logging: *log
+
+  # Chạy một lần để tạo bucket rồi thoát
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio: {condition: service_healthy}
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-it-qltb}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$S3_BUCKET &&
+      echo 'Bucket' $$S3_BUCKET 'da san sang'
+      "
+    restart: "no"
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      # Trong mạng nội bộ của Docker, hai dịch vụ này gọi nhau bằng tên service
+      DB_URL: mysql+pymysql://${MYSQL_USER:-qltb}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-it_qltb}?charset=utf8mb4
+      S3_ENDPOINT_URL: http://minio:9000
+      # Trình duyệt không phân giải được tên "minio", nên url tải ảnh lên
+      # phải được ký bằng địa chỉ ngoài. setup.sh ghi sẵn giá trị này vào .env.
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL:-http://127.0.0.1:${MINIO_API_PORT:-9000}}
+    depends_on:
+      db: {condition: service_healthy}
+      minio: {condition: service_healthy}
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    # Việc gửi báo cáo và rà quá hạn chạy trong tiến trình web,
+    # nên giữ đúng 1 worker để email không bị gửi trùng.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    logging: *log
+
+volumes:
+  db_data:
+  minio_data:

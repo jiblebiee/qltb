@@ -1,0 +1,640 @@
+﻿<!doctype html>
+<html lang="vi">
+<head>
+    <link rel="icon" href="/static/images/favicon.ico">
+    <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/static/images/apple-touch-icon-120x120.png">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Quản Lý Thiết Bị Cho Mượn IT</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <link rel="stylesheet" href="/static/css/mdevice.css" />
+</head>
+
+
+<body class="mdevice-page">
+<div class="top-right">
+  <a id="btn-back" class="icon-link" href="/modules" title="Quay láº¡i" aria-label="Quay láº¡i">
+    <img src="/static/images/back.png" alt="Quay láº¡i" class="icon-img">
+  </a>
+  <a id="btn-logout" class="icon-link danger" href="/logout" title="Đăng xuất" aria-label="Đăng xuất">
+    <img src="/static/images/icon.png" alt="Đăng xuất" class="icon-img">
+  </a>
+</div>
+
+
+
+      
+
+
+  
+
+  <div class="container">
+    <div class="header header-center">
+      <div class="brand">
+        <div class="brand-title">
+          <img class="brand-logo" src="/static/images/logo.png" alt="logo">
+          <h1>Quản Lý Thiết Bị Cho Mượn IT</h1>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav-wrap">
+      <div class="nav">
+        <button id="btn-tab-devices" class="btn primary" onclick="showTab('devices')">Thiết bị</button>
+        <button id="btn-tab-staff" class="btn" onclick="showTab('staff')">Nhân sự</button>
+        <button id="btn-tab-departments" class="btn" onclick="showTab('departments')">Phòng ban</button>
+        <button id="btn-tab-loans" class="btn" onclick="showTab('loans')">Mượn - Trả</button>
+        <button id="btn-tab-maintenance" class="btn" onclick="showTab('maintenance')">Bảo trì</button>      </div>
+    </div>
+
+    <!-- THIáº¾T Bá»Š -->
+    <section id="tab-devices" class="card" style="display:block">
+      <div class="toolbar">
+        <h2>Thi&#7871;t b&#7883;</h2>
+        <div>
+          <button class="btn" onclick="exportDevicesExcel()">Xu&#7845;t Excel</button>
+          <button class="btn" onclick="downloadDeviceTemplate()">T&#7843;i m&#7851;u Excel</button>
+          <button class="btn primary" onclick="triggerDeviceImport()">Import Excel</button>
+          <input id="device_import_file" type="file" accept=".xlsx" style="display:none" />
+        </div>
+      </div>
+
+      <div id="box-create-device" class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+        <h3>Th&#234;m thi&#7871;t b&#7883;</h3>
+
+        <div class="form">
+          <div class="row cols-2">
+            <label>T&#234;n thi&#7871;t b&#7883;
+              <input id="dev_name" placeholder="V&#237; d&#7909;: PC &#272;&#244;i-01; MC M&#225;y Chi&#7871;u-01; HDMI Ugreen 10M-01" />
+            </label>
+
+            <label>&#7842;nh thi&#7871;t b&#7883;
+              <input id="dev_file" type="file" accept="image/*" />
+            </label>
+          </div>
+
+          <div class="row cols-3">
+            <label>B&#236;nh th&#432;&#7901;ng
+              <input id="dev_normal_qty" type="number" value="0" min="0" />
+            </label>
+            <label>H&#7887;ng
+              <input id="dev_broken_qty" type="number" value="0" min="0" />
+            </label>
+            <label>&#272;ang b&#7843;o tr&#236;
+              <input id="dev_maint_qty" type="number" value="0" min="0" />
+            </label>
+          </div>
+
+          <div class="device-meta-grid desktop-only-meta">
+            <div class="device-meta-field">
+              <label>Ghi ch&#250;</label>
+              <textarea id="dev_note" class="form-control" rows="3" placeholder="T&#249;y ch&#7885;n..."></textarea>
+            </div>
+
+            <div class="device-meta-field">
+              <label>Th&#244;ng tin thi&#7871;t b&#7883;</label>
+              <textarea id="dev_info" class="form-control" rows="3" placeholder="V&#237; d&#7909;: OS | CPU | RAM | GPU | SSD | Serial..."></textarea>
+            </div>
+          </div>
+
+          <div class="create-device-actions">
+            <button class="btn success" onclick="createDevice()">T&#7841;o Thi&#7871;t B&#7883;</button>
+          </div>
+        </div>
+      </div>
+
+      <hr class="sep"/>
+
+      <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+        <div class="toolbar" style="margin-bottom:8px">
+          <h3>Danh s&#225;ch</h3>
+        </div>
+
+        <div class="row cols-2" style="gap:12px; align-items:end; margin: 0 0 12px; grid-template-columns: minmax(0,1fr) 220px;">
+          <div class="field" style="flex:1">
+            <label>T&#236;m thi&#7871;t b&#7883;</label>
+            <input id="dev_filter" placeholder="Nh&#7853;p t&#234;n / ghi ch&#250;..." oninput="applyDeviceFilter()">
+          </div>
+
+          <div class="field" style="min-width:220px">
+            <label>L&#7885;c theo tr&#7841;ng th&#225;i</label>
+            <select id="filter_device_status" onchange="loadDevices()">
+              <option value="ALL">T&#7845;t c&#7843;</option>
+              <option value="NORMAL">B&#236;nh th&#432;&#7901;ng</option>
+              <option value="BROKEN">H&#7887;ng</option>
+              <option value="MAINT">&#272;ang b&#7843;o tr&#236;</option>
+              <option value="BORROWED">&#272;ang m&#432;&#7907;n</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-scroll device-scroll">
+          <div id="devices_list"></div>
+        </div>
+      </div>
+    </section>
+
+<!-- NHÂN SỰ -->
+    <section id="tab-staff" class="card" style="display:none">
+      <div class="toolbar">
+        <h2>Nhân sự</h2>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+          <h3>Thêm nhân sự</h3>
+          <div class="form">
+            <div class="row cols-2">
+              <label>Họ và tên
+                <input id="st_name" placeholder="" />
+              </label>
+              <label>Email
+                <input id="st_email" placeholder="" />
+              </label>
+            </div>
+            <div class="row cols-2">
+              <label>Phòng ban (tuỳ chọn)
+                <select id="st_dep"><option value="">-- Chọn phòng ban (tuỳ chọn) --</option></select>
+              </label>
+              <label>Trạng thái
+                <select id="st_status">
+                  <option value="ACTIVE">C&#242;n Ho&#7841;t &#272;&#7897;ng</option>
+                  <option value="INACTIVE">&#272;&#227; Ngh&#7881;</option>
+                </select>
+              </label>
+            </div>
+            <button class="btn success" onclick="createStaff()">Tạo nhân sự</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+          <h3>Danh sách</h3>
+          <div class="row cols-2" style="gap:12px; align-items:end; margin: 0 0 12px; grid-template-columns: minmax(0,1fr) 220px;">
+            <div class="field" style="max-width:420px">
+              <label>T&#236;m nh&#226;n s&#7921;</label>
+              <input id="staff_filter" placeholder="Nh&#7853;p t&#234;n nh&#226;n s&#7921; / ph&#242;ng ban..." oninput="applyStaffFilter()">
+            </div>
+            <div class="field" style="min-width:220px">
+              <label>L&#7885;c theo tr&#7841;ng th&#225;i</label>
+              <select id="staff_status_filter" onchange="applyStaffFilter()">
+                <option value="ALL">T&#7845;t c&#7843;</option>
+                <option value="ACTIVE">C&#242;n Ho&#7841;t &#272;&#7897;ng</option>
+                <option value="INACTIVE">&#272;&#227; Ngh&#7881;</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-scroll staff-scroll">
+            <div id="staff_list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<!-- PHÒNG BAN -->
+    <section id="tab-departments" class="card" style="display:none">
+      <div class="toolbar">
+        <h2>Phòng ban</h2>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+          <h3>Thêm phòng ban</h3>
+          <div class="form">
+            <label>Tên phòng ban
+              <input id="dep_name" placeholder="Ví dụ: IT / Kế toán / Nhân sự..." />
+            </label>
+            <button class="btn success" onclick="createDepartment()">Tạo phòng ban</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+          <h3>Danh sách</h3>
+          <div class="table-wrap">
+            <div id="departments_list"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<!-- MƯỢN / TRẢ -->
+    <section id="tab-loans" class="card" style="display:none">
+      <div class="toolbar">
+        <h2>Mượn - Trả</h2>
+      </div>
+
+      <div class="borrow-layout-grid">
+        <div id="box-borrow" class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06); width:100%;">
+          <h3>Mượn thiết bị</h3>
+          <div class="form">
+            <div class="row cols-2 borrow-top-row">
+              <label class="stack-label" style="width:100%;">
+                <span class="label-text">Tên thiết bị</span>
+                <div class="autocomplete">
+                  <input id="loan_device_input" type="text" placeholder="Nhập tên thiết bị..." autocomplete="off">
+                  <input id="loan_device_id" type="hidden" value="">
+                  <div id="loan_device_suggestions" class="suggestions" style="display:none;"></div>
+                </div>
+              </label>
+
+              <label class="stack-label" style="width:100%; max-width:220px;">
+                <span class="label-text">Số lượng</span>
+                <input id="loan_qty" type="number" value="1" min="1" />
+              </label>
+            </div>
+
+            <div class="row cols-2 borrow-top-row">
+              <label class="stack-label" style="width:100%;">
+                <span class="label-text">Ảnh phiếu mượn (có thể chọn nhiều)</span>
+                <input id="loan_files" type="file" accept="image/*" multiple />
+              </label>
+
+              <div class="stack-label" style="width:100%; max-width:220px;">
+                <span class="label-text">&nbsp;</span>
+                <button class="btn borrow-left-btn" onclick="addBorrowItem()">+ Thêm thiết bị</button>
+              </div>
+            </div>
+
+            <div class="row cols-2 borrow-meta-row">
+              <label>Nhân sự mượn
+                <div class="autocomplete">
+                  <input id="loan_borrower_input" type="text" placeholder="Nhập tên nhân sự..." autocomplete="off">
+                  <div id="loan_borrower_suggestions" class="suggestions" style="display:none;"></div>
+                </div>
+                <select id="loan_borrower_select" style="display:none;"></select>
+              </label>
+              <label>Ngày mượn
+                <input id="loan_borrowed_at" type="date" />
+              </label>
+            </div>
+
+            <label class="borrow-lender-row">Nhân sự cho mượn
+              <select id="loan_lender_select"></select>
+            </label>
+
+            <button class="btn success borrow-left-btn" onclick="borrow()">Xác nhận mượn</button>
+          </div>
+        </div>
+
+        <div id="box-borrow-items" class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06); width:100%;">
+          <h3>Thiết bị đã chọn</h3>
+          <div id="borrow_items_list" style="margin-top:10px"></div>
+        </div>
+      </div>
+      <hr class="sep"/>
+      <div class="toolbar" style="margin-top:6px">
+        <h3 style="margin:0">Danh s&#225;ch phi&#7871;u</h3>
+        <div style="display:flex; gap:10px; align-items:end; justify-content:flex-end; flex-wrap:nowrap">
+          <label style="margin:0; min-width:220px">
+            <span class="small" style="display:block; margin-bottom:6px">Nh&#226;n s&#7921; m&#432;&#7907;n</span>
+            <input id="loan_borrower_filter" class="input" style="width:220px" placeholder="Nh&#7853;p t&#234;n nh&#226;n s&#7921; m&#432;&#7907;n" oninput="applyLoanFilter()" />
+          </label>
+          <label style="margin:0; min-width:160px">
+            <span class="small" style="display:block; margin-bottom:6px">L&#7885;c tr&#7841;ng th&#225;i</span>
+            <select id="loan_status_filter" class="input" style="width:160px" onchange="applyLoanFilter()">
+              <option value="ALL">T&#7845;t c&#7843;</option>
+              <option value="BORROWED">&#272;ang m&#432;&#7907;n</option>
+              <option value="RETURNED">&#272;&#227; tr&#7843;</option>
+            </select>
+          </label>
+          <div style="margin:0; min-width:220px; display:flex; align-items:end;">
+            <button id="btn-email-history" class="btn" type="button" style="width:220px" onclick="openEmailHistoryModal()">L&#7883;ch s&#7917; g&#7917;i mail</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-scroll loan-scroll">
+        <div id="loans_list"></div>
+      </div>
+
+    </section>
+
+<!-- BẢO TRÌ -->
+    <section id="tab-maintenance" class="card" style="display:none">
+      <div class="toolbar">
+        <h2>Bảo trì</h2>
+      </div>
+
+      <div class="grid cols-2">
+        <div class="card" style="padding:14px; background: rgba(0,0,0,.12); border-color: rgba(255,255,255,.06);">
+          <h3>Lên lịch bảo trì</h3>
+          <div class="form">
+            <div class="row cols-2">
+            <label>Tên thiết bị
+              <div class="autocomplete">
+                <input id="m_device_input" type="text" placeholder="Nhập tên thiết bị..." autocomplete="off">
+                <input id="m_device_id" type="hidden" value="">
+                <div id="m_device_suggestions" class="suggestions" style="display:none;"></div>
+              </div>
+            </label>
+              <label>Thời gian
+                <input id="m_scheduled_at" type="date" />
+              </label>
+            </div>
+            <label>Ghi chú
+              <textarea id="m_note" class="form-control" rows="3" placeholder="Tùy chọn..."></textarea>
+            </label>
+            <button class="btn success" onclick="createMaintenance()">Tạo lịch</button>
+          </div>
+        </div>
+
+
+      </div>
+
+      <hr class="sep"/>
+      <h3>Danh sách lịch</h3>
+      <div class="table-scroll maint-scroll">
+        <div id="maintenance_list"></div>
+      </div>
+    </section>
+
+    <!-- T?I KHO?N -->
+
+  </div>
+
+  <script src="/static/js/app.js?v=20260401-staffstatus14"></script>
+
+  <!-- Modal xem áº£nh -->
+  <div id="imgModal" class="modal" style="display:none">
+    <div class="modal-inner">
+      <img id="imgModalImg" src="" alt="Xem ảnh"/>
+    </div>
+  </div>
+
+  <!-- Modal sửa thiết bị (UPDATED: 3 qty) -->
+  <div id="editDeviceModal" class="modal" style="display:none">
+    <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">Sửa thiết bị</div>
+        </div>
+
+      <div class="form">
+        <div class="row">
+          <label>Tên thiết bị
+            <input id="edit_dev_name" />
+          </label>
+        </div>
+        <label>Ảnh thiết bị</label>
+        <input id="edit_dev_image" type="file" accept="image/*" class="form-control">
+        <div class="hint">Chọn ảnh mới để thay thế (không chọn thì giữ ảnh cũ)</div>
+        <div class="img-preview-row">
+          <img id="edit_dev_image_preview" class="thumb preview" src="" alt="preview" style="display:none;">
+        </div>
+        <div class="row cols-3">
+          <label>Bình thường
+            <input id="edit_dev_normal_qty" type="number" min="0" value="0" readonly />
+          </label>
+          <label>Hỏng
+            <input id="edit_dev_broken_qty" type="number" min="0" value="0" oninput="syncEditTotal()" />
+          </label>
+          <label>Đang bảo trì
+            <input id="edit_dev_maint_qty" type="number" min="0" value="0" oninput="syncEditTotal()" />
+          </label>
+        </div>
+
+        <div class="row">
+          <label>Tổng (tự tính)
+            <input id="edit_dev_total_qty" type="number" min="0" value="0" disabled />
+          </label>
+          <div class="hint">Khả dụng = Bình thường - Đang mượn.</div>
+        </div>
+        <div class="edit-meta-grid">
+          <div class="edit-meta-field">
+            <label>Ghi chú</label>
+            <textarea id="edit_dev_note" class="form-control" rows="3" placeholder="Tùy chọn..."></textarea>
+          </div>
+
+          <div class="edit-meta-field">
+            <label>Thông tin thiết bị</label>
+            <textarea id="edit_dev_info" class="form-control" rows="3"
+              placeholder="Ví dụ: OS | CPU | RAM | GPU | SSD | Serial..."></textarea>
+          </div>
+        </div>
+        <div class="row" style="justify-content:flex-end; gap:10px">
+          <button class="btn" type="button" onclick="closeEditDevice()">Huỷ</button>
+          <button class="btn success" type="button" onclick="saveEditDevice()">Lưu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DB ping: ch? ch?m m?u -->
+    <div id="editStaffModal" class="modal" style="display:none">
+    <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">S&#7917;a nh&#226;n s&#7921;</div>
+      </div>
+
+      <div class="form">
+        <div class="row cols-2">
+          <label>H&#7885; v&#224; t&#234;n
+            <input id="edit_st_name" />
+          </label>
+          <label>S&#272;T
+            <input id="edit_st_email" />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Ph&#242;ng ban
+            <select id="edit_st_dep"><option value="">-- Ch&#7885;n ph&#242;ng ban --</option></select>
+          </label>
+          <label>Tr&#7841;ng th&#225;i
+            <select id="edit_st_status">
+              <option value="ACTIVE">C&#242;n Ho&#7841;t &#272;&#7897;ng</option>
+              <option value="INACTIVE">&#272;&#227; Ngh&#7881;</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row" style="justify-content:flex-end; gap:10px">
+          <button class="btn" type="button" onclick="closeEditStaff()">Hu&#7927;</button>
+          <button class="btn success" type="button" onclick="saveEditStaff()">L&#432;u</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+    (async function(){
+      const el = document.getElementById("db-status");
+      if(!el) return;
+
+      async function ping(){
+        try{
+          el.classList.remove("ok","down");
+          el.classList.add("checking");
+
+          const res = await fetch("/api/health/db", { cache: "no-store" });
+          const data = await res.json();
+
+          el.classList.remove("checking");
+          if(data.ok){
+            el.classList.add("ok");
+            el.innerHTML = `<span class="dot"></span>`;
+          }else{
+            el.classList.add("down");
+            el.innerHTML = `<span class="dot"></span>`;
+          }
+        }catch(err){
+          el.classList.remove("checking","ok");
+          el.classList.add("down");
+          el.innerHTML = `<span class="dot"></span>`;
+        }
+      }
+
+      await ping();
+      setInterval(ping, 60000);
+    })();
+  </script>
+
+  <!-- Modal xác nhận xóa thiết bị -->
+  <div id="deleteDeviceModal" class="modal" style="display:none">
+    <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">Xác nhận xóa</div>
+        </div>
+
+      <div class="form">
+        <div class="small" style="opacity:.9; line-height:1.5">
+          Bạn có chắc muốn xóa thiết bị:
+          <b id="del_dev_name">(unknown)</b> ?
+        </div>
+
+        <div class="small" style="margin-top:8px; color:#ffb3b3;">
+          Hành động này không thể hoàn tác.
+        </div>
+
+        <div class="row" style="justify-content:flex-end; gap:10px; margin-top:14px">
+          <button class="btn" type="button" onclick="closeDeleteDevice()">Huỷ</button>
+          <button class="btn btn-danger" type="button" onclick="confirmDeleteDevice()">Xóa</button>
+        </div>
+      </div>
+
+      <input type="hidden" id="del_dev_id" />
+    </div>
+  </div>
+  <!-- Modal xác nhận (dùng cho xóa phòng ban / xóa thiết bị ...) -->
+  <div id="confirmModal" class="modal" style="display:none">
+    <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title" id="confirmTitle">Xác nhận</div>
+        </div>
+
+      <div class="form">
+        <div id="confirmMessage" class="small" style="white-space:pre-line; opacity:.92; line-height:1.45"></div>
+
+        <div class="row" style="justify-content:flex-end; gap:10px; margin-top:14px">
+          <button class="btn" type="button" onclick="closeConfirmModal()">Huỷ</button>
+          <button id="confirmYesBtn" class="btn danger" type="button" onclick="confirmYes()">Xóa</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Modal hoàn thành bảo trì -->
+  <div id="completeMaintModal" class="modal" style="display:none" onclick="closeCompleteMaint()">
+    <div class="modal-inner modal-form" onclick="event.stopPropagation()">
+      <div class="modal-head">
+        <div class="modal-title">Xác nhận hoàn thành bảo trì</div>
+        </div>
+
+      <div class="form">
+        <div class="small" style="opacity:.92; line-height:1.5">
+          Bạn có chắc muốn <b>đánh dấu hoàn thành</b> bảo trì cho thiết bị:
+          <b id="cm_device_name">(unknown)</b> ?
+        </div>
+
+        <label style="margin-top:12px">Ghi chú 
+          <textarea id="cm_note" class="modal-textarea" placeholder="Nhập ghi chú..."></textarea>
+        </label>
+
+        <div class="row" style="justify-content:flex-end; gap:10px; margin-top:14px">
+          <button class="btn" type="button" onclick="closeCompleteMaint()">Huỷ</button>
+          <button class="btn success" type="button" onclick="confirmCompleteMaint()">Hoàn thành</button>
+
+        </div>
+
+        <input type="hidden" id="cm_id" />
+      </div>
+    </div>
+  </div>
+  <div id="galleryModal" class="modal" style="display:none">
+    <div class="modal-inner" onclick="event.stopPropagation()" style="max-width:980px">
+      <div class="modal-head">
+        <div class="modal-title">Ảnh phiếu mượn</div>
+        </div>
+
+      <div style="text-align:center; margin:10px 0">
+        <img id="galleryImg" style="max-width:100%; max-height:70vh; border-radius:12px"/>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+        <button class="btn" onclick="galleryPrev()">&lt;</button>
+        <div id="galleryCounter" class="small"></div>
+        <button class="btn" onclick="galleryNext()">&gt;</button>
+      </div>
+    </div>
+  </div>
+  <button id="scrollTopBtn" class="scroll-top-btn" onclick="scrollToTop()">
+  ↑
+  </button>
+  <div id="toast_container"></div>
+  <div id="deviceHistoryModal" class="modal" style="display:none">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h3 id="deviceHistoryTitle">Lịch sử mượn/trả</h3>
+        <button class="btn btn-small" onclick="closeDeviceHistory()">x</button>
+      </div>
+
+      <div id="deviceHistoryBody" class="history-body">
+        <!-- render table -->
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn" onclick="closeDeviceHistory()">Đóng</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="emailHistoryModal" class="modal" style="display:none">
+    <div class="modal-content wide" style="width:min(96vw,1200px); max-height:88vh; overflow:auto;">
+      <div class="modal-header">
+        <h3 id="emailHistoryTitle">Lịch Sử Gửi Mail</h3>
+        <button class="btn btn-small" type="button" onclick="closeEmailHistoryModal()">x</button>
+      </div>
+      <div id="emailHistoryBody" class="history-body">
+        <div class="small">Đang Tải...</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" onclick="closeEmailHistoryModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="emailContentModal" class="modal" style="display:none">
+    <div class="modal-content wide" style="width:min(96vw,1200px); max-height:88vh; overflow:auto;">
+      <div class="modal-header">
+        <h3 id="emailContentTitle">Nội dung mail</h3>
+        <button class="btn btn-small" type="button" onclick="closeEmailContentModal()">x</button>
+      </div>
+      <div id="emailContentBody" class="history-body">
+        <div class="small">Đang tải...</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" type="button" onclick="closeEmailContentModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-powered-by">Powered by TruongHuuHau</div>
+</body>
+</html>
+
+
+
+
+
+
+
+
+

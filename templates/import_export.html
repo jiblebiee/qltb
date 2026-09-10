@@ -1,0 +1,305 @@
+﻿<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <link rel="icon" href="/static/images/favicon.ico">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quản lý Nhập Xuất</title>
+  <link rel="stylesheet" href="/static/css/styles.css" />
+  <link rel="stylesheet" href="/static/css/import_export.css" />
+</head>
+
+<body>
+  <div class="top-right">
+    <a id="btn-back" class="icon-link" href="/modules" title="Quay lại" aria-label="Quay lại">
+      <img src="/static/images/back.png" alt="Quay lại" class="icon-img">
+    </a>
+    <a id="btn-logout" class="icon-link danger" href="/logout" title="Đăng xuất" aria-label="Đăng xuất">
+      <img src="/static/images/icon.png" alt="Đăng xuất" class="icon-img">
+    </a>
+  </div>
+
+  <main class="container import-export-page">
+    <div class="header header-center">
+      <div class="brand">
+        <div class="brand-title">
+          <img class="brand-logo" src="/static/images/logo.png" alt="logo">
+          <h1>Quản Lý Nhập Xuất</h1>
+        </div>
+      </div>
+    </div>
+
+    <div class="top-actions import-actions">
+      <button class="ie-btn primary" id="btnImport" type="button">Nhập kho</button>
+      <button class="ie-btn" id="btnHistoryImport" type="button">Lịch sử nhập</button>
+      <button class="ie-btn" id="btnHistoryExport" type="button">Lịch sử xuất</button>
+    </div>
+
+    <div class="search-bar">
+      <input
+        type="text"
+        id="deviceSearchInput"
+        class="search-input"
+        placeholder="Search tên thiết bị, model hoặc tên nhân sự"
+        autocomplete="off"
+      />
+    </div>
+
+    <section class="table-full">
+      <div class="table-wrap">
+        <table class="tbl" id="importExportTable">
+          <thead>
+            <tr>
+              <th>Tên thiết bị</th>
+              <th>Model</th>
+              <th>SL nhập kho</th>
+              <th>Ngày nhập</th>
+              <th>Nhân sự nhập</th>
+              <th>Tình trạng lúc nhập</th>
+              <th>Hình ảnh</th>
+              <th>SL tồn kho</th>
+              <th>Lệnh xuất</th>
+              <th>Lịch sử</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <div class="modal" id="importModal">
+    <div class="modal-inner modal-form">
+      <div class="modal-head">
+        <div class="modal-title">Nhập kho thiết bị</div>
+        <button class="icon-btn" id="closeImportModal" type="button" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="importForm" class="form">
+        <div class="row cols-2">
+          <label>Tên thiết bị
+            <div class="autocomplete">
+              <input id="importDeviceInput" type="text" name="device_name" autocomplete="off" required />
+              <div id="importDeviceSuggestions" class="suggestions" style="display:none;"></div>
+            </div>
+          </label>
+          <label>Hãng
+            <input type="text" name="brand" required />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Model nhập
+            <input type="text" name="model_import" required />
+          </label>
+          <label>Số lượng nhập kho
+            <input type="number" name="qty_import" min="0" required />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Ngày nhập
+            <input type="date" name="import_date" required />
+          </label>
+          <label>Nhân sự nhập
+            <select name="staff_import" id="staffImportSelect" required>
+              <option value="">-- Chọn nhân sự --</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Tình trạng lúc nhập
+            <select name="import_status" required>
+              <option value="Hàng mới">Hàng mới</option>
+              <option value="Hàng cũ">Hàng cũ</option>
+            </select>
+          </label>
+          <label class="file-input-label">Hình ảnh nhập kho (chọn nhiều ảnh)
+            <input type="file" id="imgImportFiles" multiple accept="image/*" />
+            <div class="hint small">Nhấp để chọn file hình ảnh, kích thước tối đa 5MB</div>
+            <input type="hidden" name="import_image" id="imgImportKeys" />
+            <div id="imgImportPreviewWrap" class="img-preview-wrap"></div>
+          </label>
+        </div>
+
+        <input type="hidden" name="existing_import_id" id="existingImportId" value="" />
+        <div class="import-excel-actions">
+          <input id="importExcelFile" type="file" accept=".xlsx" style="display:none" />
+          <button class="btn btn-small" id="btnImportTemplate" type="button">Tải file mẫu</button>
+          <button class="btn btn-small" id="btnImportExcel" type="button">Import Excel</button>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="submit" id="btnSubmitImport">Lưu nhập kho</button>
+          <button class="btn danger" type="button" id="cancelImport">Hủy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="exportModal">
+    <div class="modal-inner modal-form">
+      <div class="modal-head">
+        <div class="modal-title">Xuất thiết bị</div>
+        <button class="icon-btn" id="closeExportModal" type="button" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="exportForm" class="form">
+        <div class="row cols-2">
+          <label>Tên thiết bị
+            <input type="text" name="device_name" id="exportDeviceName" readonly required />
+          </label>
+          <label>Model xuất
+            <input type="text" name="model_export" id="exportModel" required />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Số lượng xuất
+            <input type="number" name="qty_export" min="1" required />
+            <div class="hint small" id="exportAvailable">Tồn kho: --</div>
+          </label>
+          <label>Ngày xuất
+            <input type="date" name="export_date" required />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label>Nhân sự xuất
+            <select name="staff_export" id="staffExportSelect" required>
+              <option value="">-- Chọn nhân sự --</option>
+            </select>
+          </label>
+          <label>Dự án
+            <input type="text" name="project_export" required />
+          </label>
+        </div>
+
+        <div class="row cols-2">
+          <label class="file-input-label">Hình ảnh xuất (chọn nhiều ảnh)
+            <input type="file" id="imgExportFiles" multiple accept="image/*" />
+            <div class="hint small">Nhấp để chọn file hình ảnh, kích thước tối đa 5MB</div>
+            <input type="hidden" name="img_export" id="imgExportKeys" />
+            <input type="hidden" name="import_model_ref" id="exportImportModelRef" />
+            <div id="imgExportPreviewWrap" class="img-preview-wrap"></div>
+          </label>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" type="submit" id="btnSubmitExport">Xuất</button>
+          <button class="btn danger" type="button" id="cancelExport">Hủy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="importGalleryModal" class="modal">
+    <div class="modal-inner" onclick="event.stopPropagation()" style="max-width:900px;">
+      <div class="modal-head">
+        <div class="modal-title">Ảnh nhập kho</div>
+        <button class="icon-btn" id="closeImportGallery" type="button" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="gallery-view">
+        <button class="btn btn-small" id="importGalleryPrev" type="button">&#x25C0;</button>
+        <img id="importGalleryImg" src="" alt="Ảnh nhập kho" />
+        <button class="btn btn-small" id="importGalleryNext" type="button">&#x25B6;</button>
+      </div>
+      <div id="importGalleryCounter" class="small" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div id="importHistoryModal" class="modal">
+    <div class="modal-content">
+      <button class="icon-btn ie-x" id="closeImportHistoryModal" type="button" aria-label="Đóng">&times;</button>
+      <h2>Lịch sử nhập</h2>
+      <div class="history-table">
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Tên thiết bị</th>
+              <th>Model</th>
+              <th>SL nhập</th>
+              <th>Ngày nhập</th>
+              <th>Nhân sự</th>
+              <th>Tình trạng</th>
+              <th>Hình ảnh</th>
+            </tr>
+          </thead>
+          <tbody id="importHistoryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="exportHistoryModal" class="modal">
+    <div class="modal-content">
+      <button class="icon-btn ie-x" id="closeExportHistoryModal" type="button" aria-label="Đóng">&times;</button>
+      <h2>Lịch sử xuất</h2>
+      <div class="history-table">
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Tên thiết bị</th>
+              <th>Model</th>
+              <th>SL xuất</th>
+              <th>Ngày xuất</th>
+              <th>Nhân sự</th>
+              <th>Dự án</th>
+              <th>Hình ảnh</th>
+            </tr>
+          </thead>
+          <tbody id="exportHistoryTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="deviceHistoryModal" class="modal">
+    <div class="modal-content">
+      <button class="icon-btn ie-x" id="closeDeviceHistoryModal" type="button" aria-label="Đóng">&times;</button>
+      <h2 id="deviceHistoryTitle">Lịch sử thiết bị</h2>
+
+      <div class="history-tabs">
+        <button class="btn btn-small history-tab import active" id="deviceHistoryTabImport" type="button">Nhập</button>
+        <button class="btn btn-small history-tab export" id="deviceHistoryTabExport" type="button">Xuất</button>
+      </div>
+
+      <div class="history-table" id="deviceImportHistoryWrap">
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Model nhập</th>
+              <th>SL nhập</th>
+              <th>Ngày nhập</th>
+              <th>Nhân sự</th>
+              <th>Tình trạng</th>
+              <th>Hình ảnh</th>
+            </tr>
+          </thead>
+          <tbody id="deviceImportHistoryBody"></tbody>
+        </table>
+      </div>
+
+      <div class="history-table" id="deviceExportHistoryWrap">
+        <table class="ie-table">
+          <thead>
+            <tr>
+              <th>Model xuất</th>
+              <th>SL xuất</th>
+              <th>Ngày xuất</th>
+              <th>Nhân sự</th>
+              <th>Dự án</th>
+              <th>Hình ảnh</th>
+            </tr>
+          </thead>
+          <tbody id="deviceExportHistoryBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast_container"></div>
+
+  <script src="/static/js/import_export.js"></script>
+</body>
+</html>
