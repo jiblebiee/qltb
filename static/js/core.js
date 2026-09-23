@@ -122,6 +122,57 @@ function greeting() {
   return 'Chào buổi tối';
 }
 
+/* ---------------------------------------------------------------- bản nháp */
+
+/**
+ * Giữ lại những gì người dùng đã nhập dở, ngay trên máy của họ.
+ *
+ * Đóng nhầm bảng, bấm ra ngoài, lỡ tải lại trang — mở lại là còn nguyên.
+ * Nộp xong phiếu thì bản nháp được xoá. Bản nháp nằm trong localStorage nên
+ * chỉ thuộc về đúng trình duyệt đó, không đi theo tài khoản sang máy khác.
+ */
+const Draft = {
+  PREFIX: 'qltb-draft-',
+  MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000,      // quá một tuần thì coi như bỏ
+
+  save(name, data) {
+    try {
+      localStorage.setItem(this.PREFIX + name,
+        JSON.stringify({ at: Date.now(), user: ME.username, data }));
+    } catch (_) { /* trình duyệt chặn lưu trữ thì thôi, không phải lỗi */ }
+  },
+
+  /** Trả về { at, data } nếu còn hạn và đúng người, ngược lại null. */
+  load(name) {
+    let raw;
+    try { raw = localStorage.getItem(this.PREFIX + name); } catch (_) { return null; }
+    if (!raw) return null;
+    try {
+      const box = JSON.parse(raw);
+      // Máy dùng chung: bản nháp của người trước không được hiện cho người sau
+      if (box.user && box.user !== ME.username) { this.clear(name); return null; }
+      if (!box.at || Date.now() - box.at > this.MAX_AGE_MS) { this.clear(name); return null; }
+      return { at: box.at, data: box.data };
+    } catch (_) {
+      this.clear(name);
+      return null;
+    }
+  },
+
+  clear(name) {
+    try { localStorage.removeItem(this.PREFIX + name); } catch (_) { /* bỏ qua */ }
+  },
+};
+
+/** "14:32 hôm nay" / "14:32 ngày 12/09" — đủ để nhận ra bản nháp lúc nào. */
+function draftWhen(ms) {
+  const d = new Date(ms);
+  const hm = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const sameDay = d.toDateString() === new Date().toDateString();
+  return sameDay ? `${hm} hôm nay`
+    : `${hm} ngày ${d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`;
+}
+
 /* ---------------------------------------------------------------- quyền */
 
 const IS_ADMIN = String(ME.role || '').toUpperCase() === 'ADMIN';
@@ -298,11 +349,8 @@ async function withBusy(button, label, fn) {
 
 const Sheet = {
   onClose: null,
-  // Hàm trả về true khi trong bảng đang có dữ liệu chưa lưu. Có nó thì một cú
-  // bấm nhầm ra ngoài không cuốn mất công nhập của người dùng.
-  guard: null,
 
-  open({ title, body, foot, steps = null, stepLabel = '', onClose = null, guard = null }) {
+  open({ title, body, foot, steps = null, stepLabel = '', onClose = null }) {
     $('sheetTitle').innerHTML = title;
     $('sheetBody').innerHTML = body ?? '';
     $('sheetFoot').innerHTML = foot ?? '';
@@ -320,7 +368,6 @@ const Sheet = {
     }
 
     this.onClose = onClose;
-    this.guard = guard;
     $('scrim').classList.add('on');
     $('sheet').classList.add('on');
     $('sheetBody').scrollTop = 0;
@@ -343,36 +390,7 @@ const Sheet = {
     $('sheet').classList.remove('on');
     const cb = this.onClose;
     this.onClose = null;
-    this.guard = null;
     if (cb) cb();
-  },
-
-  /** Đang có dữ liệu chưa lưu hay không. */
-  isDirty() {
-    try { return !!(this.guard && this.guard()); } catch (_) { return false; }
-  },
-
-  /**
-   * Đóng theo yêu cầu rõ ràng của người dùng (nút ✕, phím Esc).
-   * Còn dữ liệu dở thì hỏi lại một câu trước khi bỏ.
-   */
-  requestClose() {
-    if (this.isDirty() &&
-        !window.confirm('Bỏ dở phiếu đang lập? Những gì đã chọn sẽ mất.')) return;
-    this.close();
-  },
-
-  /**
-   * Bấm ra vùng tối bên ngoài. Đây gần như luôn là bấm nhầm, nên khi còn dữ
-   * liệu dở thì KHÔNG đóng — chỉ lắc nhẹ và nhắc chỗ cần bấm.
-   */
-  requestCloseFromScrim() {
-    if (!this.isDirty()) { this.close(); return; }
-    const box = $('sheet');
-    box.classList.remove('nudge');
-    void box.offsetWidth;                       // ép trình duyệt chạy lại hiệu ứng
-    box.classList.add('nudge');
-    toast('Phiếu đang lập dở. Bấm ✕ ở góc nếu muốn bỏ.');
   },
 
   isOpen() { return $('sheet').classList.contains('on'); },
@@ -562,14 +580,14 @@ const loadModels = () => Cache.get('models', () => apiGet('devices/models'));
 
 document.addEventListener('DOMContentLoaded', () => {
   $('picker').addEventListener('change', (e) => Photos.handleFiles([...e.target.files]));
-  $('scrim').addEventListener('click', () => Sheet.requestCloseFromScrim());
-  $('sheetClose').addEventListener('click', () => Sheet.requestClose());
+  $('scrim').addEventListener('click', () => Sheet.close());
+  $('sheetClose').addEventListener('click', () => Sheet.close());
   $('viewer').addEventListener('click', closeViewer);
   $('viewerClose').addEventListener('click', closeViewer);
 
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if ($('viewer').classList.contains('on')) closeViewer();
-    else if (Sheet.isOpen()) Sheet.requestClose();
+    else if (Sheet.isOpen()) Sheet.close();
   });
 });

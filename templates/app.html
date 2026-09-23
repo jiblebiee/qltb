@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>Quản Lý Thiết Bị — Phòng IT</title>
   <meta name="color-scheme" content="light dark">
-  <link rel="icon" href="/static/images/favicon.ico?v=5">
-  <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png?v=5">
+  <link rel="icon" href="/static/images/favicon.ico?v=9">
+  <link rel="apple-touch-icon" href="/static/images/apple-touch-icon.png?v=9">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet"
@@ -18,7 +18,7 @@
       if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
     } catch (e) { /* trình duyệt chặn lưu trữ thì cứ theo hệ thống */ }
   </script>
-  <link rel="stylesheet" href="/static/css/app.css?v=5">
+  <link rel="stylesheet" href="/static/css/app.css?v=9">
 </head>
 <body>
 <div class="stage">
@@ -27,9 +27,9 @@
   <!-- Cột điều hướng bên trái, chỉ hiện trên màn hình rộng -->
   <aside class="side" id="side">
     <div class="sbrand">
-      <img class="on-light" src="/static/images/logo-row.png?v=5" alt="Alta Media"
+      <img class="on-light" src="/static/images/logo-row.png?v=9" alt="Alta Media"
            width="857" height="200">
-      <img class="on-dark"  src="/static/images/logo-row-dark.png?v=5" alt="Alta Media"
+      <img class="on-dark"  src="/static/images/logo-row-dark.png?v=9" alt="Alta Media"
            width="857" height="200">
       <div>
         <b>Quản lý thiết bị</b>
@@ -76,6 +76,7 @@
     <section class="screen on" id="s-home"></section>
     <section class="screen" id="s-loans"></section>
     <section class="screen" id="s-devices"></section>
+    <section class="screen" id="s-warehouse"></section>
     <section class="screen" id="s-stock"></section>
     <section class="screen" id="s-more"></section>
     <section class="screen" id="s-staff"></section>
@@ -161,11 +162,10 @@
     lenderDepartment: {{ lender_department | tojson }}
   };
 </script>
-<script src="/static/js/vendor/jsqr.min.js?v=5" defer></script>
-<script src="/static/js/core.js?v=5"></script>
-<script src="/static/js/screens.js?v=5"></script>
-<script src="/static/js/scan.js?v=5"></script>
-<script src="/static/js/flows.js?v=5"></script>
-<script src="/static/js/app.js?v=5"></script>
+<script src="/static/js/core.js?v=9"></script>
+<script src="/static/js/screens.js?v=9"></script>
+<script src="/static/js/scan.js?v=9"></script>
+<script src="/static/js/flows.js?v=9"></script>
+<script src="/static/js/app.js?v=9"></script>
 </body>
 </html>

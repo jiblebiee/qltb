@@ -81,11 +81,8 @@ async function renderHome() {
       <div class="chartcard">
         <div class="ct">Lượt mượn &amp; trả · 7 ngày</div>
         <div class="cs">${data.series7[0].date} – ${data.series7[6].date}</div>
-        ${barChart(data.series7)}
-        <div class="blegend">
-          <span><b style="background:var(--out)"></b>Mượn</span>
-          <span><b style="background:var(--ok)"></b>Trả</span>
-        </div>
+        ${barChart(data.series7.map((d) => (
+          { label: d.date, a: d.borrowed, b: d.returned })), ['Mượn', 'Trả'])}
       </div>
     </div>`;
 }
@@ -134,31 +131,158 @@ function stackedBar(segments, total) {
       `<span><b style="background:${color}"></b>${esc(label)}<em>${value}</em></span>`).join('')}</div>`;
 }
 
-function barChart(series) {
-  const W = 320, H = 132, padL = 24, padB = 20, padT = 8;
-  const max = Math.max(4, ...series.map((s) => Math.max(s.borrowed, s.returned)));
-  const step = (W - padL) / series.length;
+/**
+ * Biểu đồ cột đôi. Một hàm dùng chung cho cả trang Tổng quan lẫn bảng kho.
+ *
+ * `rows`  : [{ label, a, b }] — a vẽ cột trái, b vẽ cột phải
+ * `names` : [tên chuỗi a, tên chuỗi b] dùng cho chú giải và tooltip
+ *
+ * Hai màu --out (xanh dương) và --ok (xanh lá) đã được kiểm bằng máy: cách
+ * nhau ΔE 17.8 với mắt thường và ≥16 với ba dạng mù màu phổ biến, ở cả nền
+ * sáng lẫn nền tối. Chú giải luôn có, nên màu không phải dấu hiệu duy nhất.
+ */
+function barChart(rows, names) {
+  // Khung vẽ rộng theo số cột. Cột cố định 320 thì trên màn hình rộng ảnh bị
+  // kéo giãn ngang, chữ trục cũng giãn theo và nhìn rất xấu.
+  const H = 132, padL = 26, padB = 20, padT = 8;
+  const W = Math.max(320, padL + rows.length * 62);
+  const max = Math.max(4, ...rows.map((r) => Math.max(r.a, r.b)));
+  const step = (W - padL) / rows.length;
   const bw = Math.min(13, (step - 10) / 2);
   const y = (v) => padT + (H - padT - padB) * (1 - v / max);
+  const base = y(0);
   let out = '';
   [0, Math.round(max / 2), max].forEach((v) => {
     out += `<line x1="${padL - 4}" y1="${y(v)}" x2="${W}" y2="${y(v)}"/>`;
     out += `<text x="0" y="${y(v) + 3.4}">${v}</text>`;
   });
-  series.forEach((s, i) => {
-    const cx = padL + step * i + step / 2, base = y(0);
-    if (s.borrowed > 0) {
-      out += `<rect x="${cx - bw - 1.5}" y="${y(s.borrowed)}" width="${bw}" height="${
-        base - y(s.borrowed)}" rx="3" fill="var(--out)"/>`;
-    }
-    if (s.returned > 0) {
-      out += `<rect x="${cx + 1.5}" y="${y(s.returned)}" width="${bw}" height="${
-        base - y(s.returned)}" rx="3" fill="var(--ok)"/>`;
-    }
-    out += `<text x="${cx}" y="${H - 6}" text-anchor="middle">${esc(s.date)}</text>`;
+  rows.forEach((r, i) => {
+    const cx = padL + step * i + step / 2;
+    // Cách nhau 3px để hai cột không dính vào nhau khi in trắng đen
+    [[r.a, cx - bw - 1.5, 'var(--out)', names[0]],
+     [r.b, cx + 1.5, 'var(--ok)', names[1]]].forEach(([v, x, color, nm]) => {
+      if (v > 0) {
+        out += `<rect x="${x}" y="${y(v)}" width="${bw}" height="${base - y(v)}"
+          rx="3" fill="${color}"><title>${esc(r.label)} · ${esc(nm)}: ${v}</title></rect>`;
+      }
+    });
+    out += `<text x="${cx}" y="${H - 6}" text-anchor="middle">${esc(r.label)}</text>`;
   });
   return `<svg class="bars" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-    aria-label="Biểu đồ lượt mượn và trả 7 ngày">${out}</svg>`;
+    aria-label="Biểu đồ ${esc(names[0])} và ${esc(names[1])}">${out}</svg>
+    <div class="blegend">
+      <span><b style="background:var(--out)"></b>${esc(names[0])}</span>
+      <span><b style="background:var(--ok)"></b>${esc(names[1])}</span>
+    </div>`;
+}
+
+/**
+ * Lịch sử ra vào của MỘT mặt hàng trong kho.
+ *
+ * Đây là mảnh còn thiếu của tab Nhập / Xuất: trước chỉ lập được phiếu, không
+ * tra ngược được một mặt hàng đã vào ra những lần nào, ai lập, hàng đi đâu.
+ */
+async function openStockProduct(json) {
+  const [name, code] = JSON.parse(json);
+  Sheet.open({ title: 'Đang tải…', body: loadingBox(), foot: '' });
+  let d;
+  try {
+    d = await apiGet('stock/product', { name, code });
+  } catch (err) {
+    Sheet.setBody(errorBox(err));
+    return;
+  }
+
+  const pct = d.imported ? Math.round(d.on_hand / d.imported * 100) : 0;
+  Sheet.setTitle(esc(d.product_name));
+  Sheet.setBody(`
+    <div class="card" style="margin-bottom:14px">
+      <dl class="kv" style="margin:0">
+        <dt>Model</dt><dd class="mono">${esc(d.model_code)}</dd>
+        ${d.brand ? `<dt>Hãng</dt><dd>${esc(d.brand)}</dd>` : ''}
+        <dt>Đã nhập</dt><dd>${d.imported}</dd>
+        <dt>Đã xuất</dt><dd>${d.exported}</dd>
+        <dt>Tồn kho</dt>
+        <dd><b style="font-size:19px">${d.on_hand}</b>
+          <span class="pill ${d.on_hand > 0 ? 'p-ok' : 'p-bad'}" style="margin-left:8px">${
+            d.on_hand > 0 ? 'còn ' + pct + '%' : 'Hết hàng'}</span></dd>
+        ${d.first_in ? `<dt>Nhập lần đầu</dt><dd>${fmtDate(d.first_in)}</dd>` : ''}
+      </dl>
+      <div class="qbar" style="margin-top:12px">
+        <i style="background:var(--ok);flex:${Math.max(d.on_hand, 0.001)}"></i>
+        <i style="background:var(--out);flex:${Math.max(d.exported, 0.001)}"></i>
+      </div>
+    </div>
+
+    ${placeCard(d)}
+
+    <h2 class="sec">Lịch sử <span class="count">${d.moves.length}</span></h2>
+    <div class="rows">${d.moves.map(stockMoveRow).join('')
+      || emptyBox('Chưa có phiếu nào')}</div>
+    <div style="height:8px"></div>`);
+
+  Place.mount(d);
+
+  Sheet.setFoot(`<button class="btn ghost" onclick="Sheet.close()">Đóng</button>
+    ${d.on_hand > 0 && can('import_export.create')
+      ? `<button class="btn" onclick="Sheet.close();StockExport.open(${
+          esc(JSON.stringify(JSON.stringify(
+            { product_name: d.product_name, model_code: d.model_code })))})">Xuất hàng</button>`
+      : ''}`);
+}
+
+/**
+ * Ô "để ở đâu trong kho" của một mặt hàng.
+ *
+ * Người có quyền sửa kho thì gõ được chỗ để và chụp được ảnh chỗ đó; người chỉ
+ * xem thì đọc thôi. Ảnh giúp người mới vào kho tìm đúng kệ mà không phải hỏi.
+ */
+function placeCard(d) {
+  if (!can('import_export.update')) {
+    if (!d.location && !d.image_url) return '';
+    return `<div class="card" style="margin-bottom:14px">
+      <div class="ct">Vị trí trong kho</div>
+      <div class="placeval">${d.location ? esc(d.location) : 'Chưa khai'}</div>
+      ${d.location_note ? `<div class="meta">${esc(d.location_note)}</div>` : ''}
+      ${d.image_url ? `<div class="placeshot"><img src="${esc(d.image_url)}"
+        alt="Ảnh vị trí kho" onclick="openViewer(${
+          esc(JSON.stringify(d.image_url))})"></div>` : ''}
+    </div>`;
+  }
+  return `<div class="card" style="margin-bottom:14px">
+    <div class="ct">Vị trí trong kho</div>
+    <div class="field" style="margin:10px 0 0">
+      <label for="placeInput">Chỗ để</label>
+      <input id="placeInput" maxlength="160" placeholder="Ví dụ: Kệ A3 — tầng 2"
+             value="${esc(d.location || '')}">
+    </div>
+    <div class="field" style="margin:12px 0 0">
+      <label for="placeNote">Ghi chú</label>
+      <input id="placeNote" placeholder="Ví dụ: hộp ngoài cùng bên trái"
+             value="${esc(d.location_note || '')}">
+    </div>
+    <div id="placeBox"></div>
+    <button class="btn ghost sm" style="margin-top:12px;width:auto;padding:0 18px"
+            onclick="Place.save(this)">Lưu vị trí</button>
+  </div>`;
+}
+
+function stockMoveRow(m) {
+  const isIn = m.kind === 'IN';
+  const where = isIn
+    ? (m.detail || '')
+    : [m.detail, m.to].filter(Boolean).join(' — ');
+  return `<button class="row" onclick="openStockRecord('${m.kind}', ${m.id})">
+    <div class="main">
+      <div class="title">${isIn ? 'Nhập kho' : 'Xuất kho'}${
+        where ? ` · ${esc(where)}` : ''}</div>
+      <div class="meta">${fmtDate(m.at)}${m.who ? ' · ' + esc(m.who) : ''}</div>
+      ${m.note ? `<div class="meta">${esc(m.note)}</div>` : ''}
+    </div>
+    <div class="rt">
+      <span class="pill ${isIn ? 'p-ok' : 'p-out'}">${isIn ? '+' : '−'}${m.qty}</span>
+    </div>
+  </button>`;
 }
 
 /* ================================================================
@@ -319,6 +443,10 @@ async function renderDevices() {
       <button class="btn ghost sm tool" onclick="downloadFile('devices/export')">
         <svg viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
         Xuất Excel</button>
+      <button class="btn ghost sm tool" onclick="printAllLabels()"
+              title="In tem QR cho toàn bộ máy — hỏi lại trước khi chạy">
+        <svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a1 1 0 01-1-1v-6a1 1 0 011-1h16a1 1 0 011 1v6a1 1 0 01-1 1h-2"/><path d="M6 14h12v7H6z"/></svg>
+        In tem toàn bộ</button>
     </div>
     <div class="chips" id="devChips">${DEVICE_FILTERS.map(([k, label]) =>
       `<button class="chip ${Devices.filter === k ? 'on' : ''}" data-k="${k}"
@@ -511,13 +639,15 @@ async function openQr(modelId) {
         Tem từng máy · ${total} tem
       </button>
       <button class="btn ghost" onclick="printLabels(${m.id},'model')">
-        Một tem mã loại
+        Tem mã loại · 2 tem
       </button>
     </div>
-    <p class="qrnote">Tem từng máy mang mã riêng của máy (${
+    <p class="qrnote">Trên tem chỉ có <b>QR</b> và <b>tên thiết bị</b> — mã nằm
+      trong QR, không in ra. Tem từng máy mang mã riêng của máy (${
       esc(total ? m.units[0].code : m.code + '-01')}…), quét vào là máy đó nhảy
-      thẳng vào phiếu mượn. Tem mã loại dán lên thùng hoặc kệ chứa cả lô.</p>
-    <p class="qrnote">Trang tem mở ở thẻ mới, khổ 50×30mm, bấm <b>In</b> hoặc Ctrl+P.</p>`);
+      thẳng vào phiếu mượn; tem mã loại dán lên thùng hoặc kệ chứa cả lô.</p>
+    <p class="qrnote">Giấy decal 2 tem khổ 98mm (mỗi tem 50×30mm), máy in Godex
+      Z530 — mỗi lần đẩy giấy ra 2 tem. Trang tem mở ở thẻ mới, bấm <b>In</b>.</p>`);
   Sheet.setFoot(`<button class="btn ghost" onclick="Sheet.close()">Đóng</button>
     <button class="btn" onclick="openModel(${m.id})">Xem loại thiết bị</button>`);
 }
@@ -525,6 +655,33 @@ async function openQr(modelId) {
 /** Mở trang tem in được ở thẻ mới — trình duyệt tự gửi cookie phiên. */
 function printLabels(modelId, kind) {
   window.open(`${API}/devices/models/${modelId}/labels?kind=${kind}`, '_blank', 'noopener');
+}
+
+/**
+ * In tem cho TOÀN BỘ thiết bị.
+ *
+ * Việc này chạy liên tục hàng trăm lần đẩy giấy, nên hỏi lại bằng con số thật
+ * lấy từ máy chủ — bao nhiêu tem, bao nhiêu lần đẩy, tốn bao nhiêu decal — chứ
+ * không bắt người dùng đoán. Trang tem còn một lớp tick xác nhận nữa.
+ */
+async function printAllLabels() {
+  let info;
+  try {
+    info = await apiGet('devices/labels/count');
+  } catch (err) {
+    toast(err.detail || 'Không đếm được số tem.', true);
+    return;
+  }
+  if (!info.units) { toast('Chưa có máy nào trong hệ thống để in tem.', true); return; }
+
+  const metres = (info.length_cm / 100).toFixed(1);
+  const ok = window.confirm(
+    `In tem cho toàn bộ ${info.units} máy?\n\n`
+    + `· ${info.feeds} lần đẩy giấy (mỗi lần 2 tem)\n`
+    + `· khoảng ${metres}m decal, máy chạy liên tục không dừng\n\n`
+    + 'Mở trang tem bây giờ?');
+  if (!ok) return;
+  window.open(`${API}/devices/labels/all`, '_blank', 'noopener');
 }
 
 /* ---------- chi tiết một loại thiết bị ---------- */
@@ -767,7 +924,7 @@ async function openTicket(code) {
    NHẬP / XUẤT KHO
    ================================================================ */
 
-const Stock = { tab: 'levels' };
+const Stock = { tab: 'imports' };
 
 Stock.setTab = function (key) {
   Stock.tab = key;
@@ -778,10 +935,11 @@ Stock.setTab = function (key) {
   renderStockBody();
 };
 
+
 async function renderStock() {
   $('s-stock').innerHTML = `
     <div class="seg">
-      ${[['levels', 'Tồn kho'], ['imports', 'Phiếu nhập'], ['exports', 'Phiếu xuất']]
+      ${[['imports', 'Phiếu nhập'], ['exports', 'Phiếu xuất']]
         .map(([k, label]) => `<button class="${Stock.tab === k ? 'on' : ''}" data-k="${k}"
           onclick="Stock.setTab('${k}')">${esc(label)}</button>`).join('')}
     </div>
@@ -793,90 +951,12 @@ async function renderStockBody() {
   const box = $('stockBody');
   if (!box) return;
   try {
-    const summary = await apiGet('stock/summary');
-    const head = `<div class="kpis" style="margin-bottom:16px">
-      <div class="kpi" style="cursor:default">
-        <div class="k"><span class="dot" style="background:var(--ok)"></span>Còn trong kho</div>
-        <div class="v">${summary.on_hand}</div><div class="sub">${summary.products} mặt hàng</div>
-      </div>
-      <div class="kpi" style="cursor:default">
-        <div class="k"><span class="dot" style="background:var(--out)"></span>Đã xuất</div>
-        <div class="v">${summary.exported}</div>
-        <div class="sub">trên tổng ${summary.imported} đã nhập</div>
-      </div></div>`;
-
-    if (Stock.tab === 'levels') {
-      const rows = await apiGet('stock/levels');
-
-      if (isWide()) {
-        const canExport = can('import_export.create');
-        const cols = [{ t: 'Sản phẩm' }, { t: 'Model', cls: 'nowrap' },
-                      { t: 'Đã nhập', cls: 'num' }, { t: 'Đã xuất', cls: 'num' },
-                      { t: 'Còn lại', cls: 'num' }, { t: 'Tỷ lệ còn', cls: 'nowrap' }];
-        if (canExport) cols.push({ t: '', cls: 'nowrap' });
-
-        box.innerHTML = head + (dataTable(cols, rows.map((r) => {
-          const pct = r.imported ? Math.round(r.on_hand / r.imported * 100) : 0;
-          const cells = [
-            `<span class="strong">${esc(r.product_name)}</span>`,
-            `<span class="mono">${esc(r.model_code)}</span>`,
-            String(r.imported), String(r.exported), String(r.on_hand),
-            `<span class="pill ${r.on_hand > 0 ? 'p-ok' : 'p-bad'}">${
-              r.on_hand > 0 ? pct + '%' : 'Hết hàng'}</span>`,
-          ];
-          if (canExport) {
-            cells.push(r.on_hand > 0
-              ? `<button class="btn ghost sm" style="width:auto;padding:0 12px"
-                  onclick="StockExport.open(${esc(JSON.stringify(JSON.stringify(
-                    { product_name: r.product_name, model_code: r.model_code })))})">Xuất hàng</button>`
-              : '');
-          }
-          return { cells, cls: r.on_hand > 0 ? '' : 'warn' };
-        }))
-          || emptyBox('Kho chưa có mặt hàng nào'));
-        return;
-      }
-
-      box.innerHTML = head + (rows.length ? `<div class="rows">${rows.map((r) => {
-        const pct = r.imported ? Math.round(r.on_hand / r.imported * 100) : 0;
-        return `<div class="row" style="cursor:default;flex-direction:column;align-items:stretch;gap:0">
-          <div style="display:flex;gap:12px;width:100%;align-items:flex-start">
-            <div class="main">
-              <div class="title">${esc(r.product_name)}</div>
-              <div class="meta mono">${esc(r.model_code)}</div>
-            </div>
-            <div class="rt">
-              <span class="pill ${r.on_hand > 0 ? 'p-ok' : 'p-bad'}">${
-                r.on_hand > 0 ? pct + '% còn' : 'Hết hàng'}</span>
-              <span class="num">${r.on_hand}</span>
-            </div>
-          </div>
-          <div class="qbar">
-            <i style="background:var(--ok);flex:${Math.max(r.on_hand, 0.001)}"></i>
-            <i style="background:var(--out);flex:${Math.max(r.exported, 0.001)}"></i>
-          </div>
-          <div class="qlegend">
-            <span><b style="background:var(--ok)"></b>Còn <em>${r.on_hand}</em></span>
-            <span><b style="background:var(--out)"></b>Đã xuất <em>${r.exported}</em></span>
-            <span>Tổng nhập <em>${r.imported}</em></span>
-          </div>
-          ${r.on_hand > 0 && can('import_export.create')
-            ? `<button class="btn ghost sm" style="margin-top:11px"
-                onclick="StockExport.open(${esc(JSON.stringify(JSON.stringify(
-                  { product_name: r.product_name, model_code: r.model_code })))})">
-                Xuất hàng</button>` : ''}
-        </div>`;
-      }).join('')}</div>
-`
-        : emptyBox('Kho chưa có mặt hàng nào'));
-      return;
-    }
 
     const isImport = Stock.tab === 'imports';
     const rows = await apiGet(isImport ? 'stock/imports' : 'stock/exports', { limit: 200 });
 
     if (isWide()) {
-      box.innerHTML = head + (dataTable(
+      box.innerHTML = (dataTable(
         [{ t: 'Ngày', cls: 'nowrap' }, { t: 'Sản phẩm' }, { t: 'Model', cls: 'nowrap' },
          isImport ? { t: 'Hãng' } : { t: 'Mục đích' },
          isImport ? { t: 'Tình trạng' } : { t: 'Nơi nhận' },
@@ -899,7 +979,7 @@ async function renderStockBody() {
       return;
     }
 
-    box.innerHTML = head + (rows.length ? `<div class="rows">${rows.map((r) => `
+    box.innerHTML = (rows.length ? `<div class="rows">${rows.map((r) => `
       <button class="row" onclick="openStockRecord('${isImport ? 'IN' : 'OUT'}', ${r.id})">
         <div class="main">
           <div class="title">${esc(r.product_name)}</div>
@@ -1370,6 +1450,10 @@ function renderMore() {
   const rows = [];
   if (isWide()) return renderAccountPage();
 
+  // Thanh dưới chỉ đủ 5 mục; Kho hàng chiếm chỗ nên lập phiếu lùi vào đây
+  if (can('import_export.view')) {
+    rows.push(['stock', 'Nhập / Xuất kho', 'Lập phiếu nhập và phiếu xuất']);
+  }
   if (can('loan.staff.view')) {
     rows.push(['staff', 'Nhân sự', 'Xem theo từng phòng ban, ai đang giữ máy nào']);
   }
@@ -1444,3 +1528,299 @@ function renderAccountPage() {
         </div>
     </div>`;
 }
+
+/* ================================================================
+   KHO HÀNG — bảng điều khiển hàng hoá đang lưu kho.
+
+   Trang này chỉ ĐỌC. Số liệu đổ sang từ các phiếu ở màn Nhập / Xuất:
+   tồn kho = tổng nhập − tổng xuất, gom theo cặp (tên sản phẩm + model).
+   Lập phiếu vẫn nằm bên màn Nhập / Xuất, ở đây chỉ mở thẳng sang.
+   ================================================================ */
+
+const Wh = {
+  q: '',
+  sort: 'on_hand',        // on_hand | imported | exported | last_in | name
+  only: 'all',            // all | low | out
+  place: '',              // '' = mọi vị trí, '--' = chưa khai vị trí
+  summary: null,
+  rows: [],
+  timer: null,
+};
+
+async function renderWarehouse() {
+  const box = $('s-warehouse');
+  box.innerHTML = `<div id="whHead"></div><div id="whBody">${skeletonRows(4)}</div>`;
+
+  try {
+    const [summary, rows] = await Promise.all([
+      apiGet('stock/summary'),
+      apiGet('stock/levels'),
+    ]);
+    Wh.summary = summary;
+    Wh.rows = rows;
+  } catch (err) {
+    box.innerHTML = errorBox(err, 'renderWarehouse()');
+    return;
+  }
+
+  const s = Wh.summary;
+
+  $('whHead').innerHTML = `
+    <div class="kpis" style="margin-bottom:14px">
+      <div class="kpi" style="cursor:default">
+        <div class="k"><span class="dot" style="background:var(--ok)"></span>Tồn kho</div>
+        <div class="v">${s.on_hand}</div>
+        <div class="sub">${s.products} mặt hàng</div>
+      </div>
+      <div class="kpi" style="cursor:default">
+        <div class="k"><span class="dot" style="background:var(--out)"></span>Đã nhập</div>
+        <div class="v">${s.imported}</div>
+      </div>
+      <div class="kpi" style="cursor:default">
+        <div class="k"><span class="dot" style="background:var(--maint)"></span>Đã xuất</div>
+        <div class="v">${s.exported}</div>
+      </div>
+      <button class="kpi ${s.out_of_stock ? 'alert' : ''}"
+              onclick="Wh.setOnly('${s.out_of_stock ? 'out' : 'low'}')">
+        <div class="k"><span class="dot" style="background:var(--bad)"></span>Cần nhập thêm</div>
+        <div class="v">${s.out_of_stock + (s.low_stock || 0)}</div>
+        <div class="sub">${s.out_of_stock} hết · ${s.low_stock || 0} sắp hết</div>
+      </button>
+    </div>
+    <div class="toolrow" style="margin-bottom:12px">
+      <div class="search" style="flex:1 1 220px;margin:0">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="whQ" placeholder="Tìm tên hàng hoá, model, vị trí…"
+               value="${esc(Wh.q)}" oninput="Wh.onSearch(this.value)">
+      </div>
+      <select class="minisel" onchange="Wh.setOnly(this.value)">
+        ${[['all', 'Tất cả mặt hàng'], ['low', 'Sắp hết'], ['out', 'Hết hàng']]
+          .map(([k, t]) => `<option value="${k}" ${Wh.only === k ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <select class="minisel" id="whPlaceSel" onchange="Wh.setPlace(this.value)">
+        ${whPlaceOptions()}
+      </select>
+      <select class="minisel" onchange="Wh.setSort(this.value)">
+        ${[['on_hand', 'Tồn nhiều nhất'], ['exported', 'Xuất nhiều nhất'],
+           ['imported', 'Nhập nhiều nhất'], ['last_in', 'Nhập gần đây'],
+           ['name', 'Tên A→Z']]
+          .map(([k, t]) => `<option value="${k}" ${Wh.sort === k ? 'selected' : ''}>${t}</option>`).join('')}
+      </select>
+      <button class="btn ghost sm tool" onclick="downloadFile('stock/export-excel')">
+        <svg viewBox="0 0 24 24"><path d="M12 3v12M7 11l5 5 5-5M5 21h14"/></svg>
+        Xuất Excel</button>
+      <button class="btn ghost sm tool" onclick="openScreen('stock')">
+        <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h7M20 15l-3 3 3 3"/></svg>
+        Phiếu nhập / xuất</button>
+    </div>`;
+  drawWarehouseList();
+}
+
+/** Danh sách vị trí lấy thẳng từ dữ liệu: kho khai tới đâu lọc được tới đó. */
+function whPlaceOptions() {
+  const places = [...new Set(Wh.rows.map((r) => r.location).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'vi'));
+  return `<option value="" ${Wh.place === '' ? 'selected' : ''}>Mọi vị trí kho</option>
+    <option value="--" ${Wh.place === '--' ? 'selected' : ''}>Chưa khai vị trí</option>
+    ${places.map((p) => `<option value="${esc(p)}" ${
+      Wh.place === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}`;
+}
+
+/** Lọc và sắp xếp ngay trên máy — kho chỉ vài trăm dòng, khỏi gọi lại máy chủ. */
+function warehouseRows() {
+  const kw = Wh.q.trim().toLowerCase();
+  const low = (Wh.summary && Wh.summary.low_threshold) || 3;
+  const out = Wh.rows.filter((r) => {
+    if (Wh.only === 'out' && r.on_hand > 0) return false;
+    if (Wh.only === 'low' && !(r.on_hand > 0 && r.on_hand <= low)) return false;
+    if (Wh.place === '--' && r.location) return false;
+    if (Wh.place && Wh.place !== '--' && r.location !== Wh.place) return false;
+    if (!kw) return true;
+    return `${r.product_name} ${r.model_code} ${r.location || ''}`.toLowerCase().includes(kw);
+  });
+  const by = Wh.sort;
+  if (by === 'name') {
+    out.sort((a, b) => a.product_name.localeCompare(b.product_name, 'vi'));
+  } else if (by === 'last_in') {
+    out.sort((a, b) => String(b.last_in || '').localeCompare(String(a.last_in || '')));
+  } else {
+    out.sort((a, b) => b[by] - a[by] || a.product_name.localeCompare(b.product_name, 'vi'));
+  }
+  return out;
+}
+
+function warehouseEmpty() {
+  if (Wh.only === 'out') return 'Không có mặt hàng nào hết hàng';
+  if (Wh.only === 'low') return 'Không có mặt hàng nào sắp hết';
+  if (Wh.place === '--') return 'Mặt hàng nào cũng đã khai vị trí kho';
+  if (Wh.place) return `Không có mặt hàng nào ở ${Wh.place}`;
+  return Wh.q ? `Không có mặt hàng nào khớp "${Wh.q}"` : 'Kho chưa có mặt hàng nào';
+}
+
+/** Ô ảnh vị trí kho: bấm vào xem to, chưa có ảnh thì để một ô trống mờ. */
+function whThumb(r) {
+  if (!r.image_url) return '<span class="dash">—</span>';
+  return `<img class="whshot" src="${esc(r.image_url)}" alt="Vị trí ${esc(r.location || '')}"
+    loading="lazy" onclick="event.stopPropagation();openViewer(${
+      esc(JSON.stringify(r.image_url))})">`;
+}
+
+function drawWarehouseList() {
+  const box = $('whBody');
+  if (!box) return;
+  const rows = warehouseRows();
+  const open = (r) => `openStockProduct(${esc(JSON.stringify(JSON.stringify(
+    [r.product_name, r.model_code])))})`;
+
+  if (isWide()) {
+    const cols = [{ t: 'Tên hàng hoá' }, { t: 'Số lượng', cls: 'num' },
+                  { t: 'Ngày nhập', cls: 'nowrap' }, { t: 'Vị trí kho' },
+                  { t: 'Số lượng tồn', cls: 'num' }, { t: 'Đã xuất', cls: 'num' },
+                  { t: 'Còn lại', cls: 'nowrap' }, { t: 'Ảnh vị trí', cls: 'nowrap' }];
+
+    box.innerHTML = dataTable(cols, rows.map((r) => ({
+      cells: [
+        `<span class="strong">${esc(r.product_name)}</span>
+         <span class="mono sub2">${esc(r.model_code)}</span>`,
+        String(r.imported),
+        r.last_in ? fmtDate(r.last_in) : '—',
+        r.location ? esc(r.location) : '<span class="dash">Chưa khai</span>',
+        `<span class="strong">${r.on_hand}</span>`,
+        String(r.exported),
+        `<span class="pill ${r.on_hand > 0 ? 'p-ok' : 'p-bad'}">${
+          r.on_hand > 0 ? r.on_hand + ' / ' + r.imported : 'Hết hàng'}</span>`,
+        whThumb(r),
+      ],
+      cls: r.on_hand > 0 ? '' : 'warn',
+      click: open(r),
+    }))) || emptyBox(warehouseEmpty());
+    return;
+  }
+
+  box.innerHTML = rows.length ? `<div class="rows">${rows.map((r) => `
+    <div class="row" style="flex-direction:column;align-items:stretch;gap:0"
+         onclick="${open(r)}">
+      <div style="display:flex;gap:12px;width:100%;align-items:flex-start">
+        <div class="main">
+          <div class="title">${esc(r.product_name)}</div>
+          <div class="meta mono">${esc(r.model_code)}</div>
+        </div>
+        <div class="rt">
+          <span class="pill ${r.on_hand > 0 ? 'p-ok' : 'p-bad'}">${
+            r.on_hand > 0 ? 'Còn ' + r.on_hand : 'Hết hàng'}</span>
+        </div>
+      </div>
+      <div class="qbar">
+        <i style="background:var(--ok);flex:${Math.max(r.on_hand, 0.001)}"></i>
+        <i style="background:var(--out);flex:${Math.max(r.exported, 0.001)}"></i>
+      </div>
+      <div class="qlegend">
+        <span><b style="background:var(--ok)"></b>Tồn <em>${r.on_hand}</em></span>
+        <span><b style="background:var(--out)"></b>Đã xuất <em>${r.exported}</em></span>
+        <span>Số lượng <em>${r.imported}</em></span>
+      </div>
+      <div class="whfoot">
+        <div>
+          <div class="meta">Ngày nhập ${r.last_in ? fmtDate(r.last_in) : '—'}</div>
+          <div class="meta">Vị trí ${r.location ? esc(r.location) : 'chưa khai'}</div>
+        </div>
+        ${whThumb(r)}
+      </div>
+    </div>`).join('')}</div>` : emptyBox(warehouseEmpty());
+}
+
+Wh.onSearch = function (value) {
+  Wh.q = value;
+  clearTimeout(Wh.timer);
+  Wh.timer = setTimeout(drawWarehouseList, 200);
+};
+Wh.setSort = function (value) { Wh.sort = value; drawWarehouseList(); };
+Wh.setPlace = function (value) { Wh.place = value; drawWarehouseList(); };
+Wh.setOnly = function (value) {
+  Wh.only = value;
+  const sel = document.querySelectorAll('#whHead .minisel')[0];
+  if (sel) sel.value = value;
+  drawWarehouseList();
+};
+
+/* ---------------------------------------------- khai vị trí để trong kho */
+
+/**
+ * Ô khai chỗ để của một mặt hàng, nằm trong phiếu chi tiết mặt hàng.
+ * Ảnh tải thẳng lên S3 như mọi ảnh khác, ở đây chỉ giữ object key.
+ */
+const Place = {
+  name: '', code: '', url: null, key: undefined,
+
+  /** `key === undefined` nghĩa là chưa đụng tới ảnh, lưu xong vẫn giữ ảnh cũ. */
+  mount(d) {
+    this.name = d.product_name;
+    this.code = d.model_code;
+    this.url = d.image_url || null;
+    this.key = undefined;
+    this.draw();
+  },
+
+  draw() {
+    const box = $('placeBox');
+    if (!box) return;
+    box.innerHTML = `
+      <div class="placeshot">
+        ${this.url
+          ? `<img src="${esc(this.url)}" alt="Ảnh vị trí kho"
+               onclick="openViewer(${esc(JSON.stringify(this.url))})">
+             <button class="x" onclick="Place.dropPhoto()" aria-label="Bỏ ảnh">
+               <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg></button>`
+          : `<button class="addshot" onclick="Place.pickPhoto()">
+               ${CAM_ICON}<span>Chụp ảnh chỗ để</span></button>`}
+      </div>`;
+  },
+
+  /**
+   * Ảnh lưu ngay khi chọn xong: máy chủ trả lại URL đã ký để hiện lên, khỏi
+   * phải tự dựng URL tạm rồi lại thay bằng URL thật sau khi bấm Lưu.
+   */
+  pickPhoto() {
+    Photos.pick('im_export', (keys) => {
+      if (!keys.length) return;
+      this.key = keys[0];
+      this.save();
+    });
+  },
+
+  dropPhoto() {
+    this.key = '';
+    this.save();
+  },
+
+  async save(btn) {
+    const input = $('placeInput');
+    const note = $('placeNote');
+    await withBusy(btn, 'Đang lưu', async () => {
+      const body = {
+        product_name: this.name, model_code: this.code,
+        location: input ? input.value.trim() : null,
+        note: note ? note.value.trim() : null,
+      };
+      // Không đụng tới ảnh thì không gửi trường này, máy chủ giữ nguyên ảnh cũ
+      if (this.key !== undefined) body.image_key = this.key;
+      try {
+        const saved = await apiPut('stock/location', body);
+        this.key = undefined;
+        this.url = saved.image_url || null;
+        this.draw();
+        toast('Đã lưu vị trí kho');
+        // Bảng ngoài kia đang giữ số liệu cũ, cập nhật đúng dòng vừa sửa
+        const row = Wh.rows.find((r) => r.product_name === this.name
+          && r.model_code === this.code);
+        if (row) { row.location = saved.location; row.image_url = saved.image_url; }
+        // Vị trí mới khai phải có mặt luôn trong ô lọc, khỏi đợi tải lại trang
+        const sel = $('whPlaceSel');
+        if (sel) sel.innerHTML = whPlaceOptions();
+        drawWarehouseList();
+      } catch (err) {
+        toastError(err);
+      }
+    });
+  },
+};

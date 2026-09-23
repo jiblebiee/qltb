@@ -74,6 +74,34 @@ Nên đặt `backup.sh` vào cron chạy hằng đêm:
 0 2 * * * cd /opt/it-qltb && ./scripts/backup.sh >> /var/log/qltb-backup.log 2>&1
 ```
 
+## Nếu Docker báo "pull access denied"
+
+Lỗi hay gặp nhất lúc cài trên máy mới:
+
+```
+Error response from daemon: pull access denied for minio/minio,
+repository does not exist or may require 'docker login'
+```
+
+Ảnh **có tồn tại** — câu "repository does not exist" của Docker là thông báo
+chung cho mọi lỗi 401, và ở đây gần như luôn là **Docker Hub giới hạn số lượt
+tải cho máy chưa đăng nhập** (khoảng 100 lượt mỗi 6 giờ tính theo địa chỉ IP,
+cả công ty dùng chung một IP thì rất dễ chạm hạn).
+
+Script đã tự xử một phần: tải từng ảnh một, thử lại 3 lần, và MinIO thì tự
+chuyển sang kho dự phòng `quay.io` rồi gắn lại đúng tên. Vẫn không được thì
+chọn một trong ba cách:
+
+```bash
+docker login                       # 1. đăng nhập Docker Hub (tài khoản miễn phí là đủ)
+                                   # 2. hoặc đợi khoảng 6 tiếng
+./scripts/setup.sh --external      # 3. hoặc dùng MySQL và S3 sẵn có của công ty
+```
+
+Hệ thống chỉ cần **hai** ảnh nền: `mysql:8.0` và `minio/minio`. Ảnh `minio/mc`
+đã bị bỏ — trước đây nó chỉ để chạy một lệnh tạo bucket, giờ chính ứng dụng tự
+tạo bucket lúc khởi động và thử lại vài lần ở nền.
+
 ## Một điểm dễ vướng: ảnh chụp từ máy trạm
 
 Trình duyệt tải ảnh **thẳng** lên kho ảnh, không đi qua máy chủ ứng dụng. Nên
@@ -136,7 +164,7 @@ Trỏ `DB_URL` sang một bản sao của database, rồi:
 
 ```bash
 pip install -r requirements.txt
-pytest -q                       # 55 test, phải xanh hết
+pytest -q                       # 71 test, phải xanh hết
 uvicorn app.main:app --reload
 ```
 

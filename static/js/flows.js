@@ -24,6 +24,9 @@ const Borrow = {
   staff: [],
   models: [],
   units: [],
+  // Bản nháp được khôi phục lúc mở; null nghĩa là bắt đầu trắng
+  draftAt: null,
+  droppedFromDraft: 0,
 
   async open(preselectUnitId = null) {
     this.step = 1;
@@ -37,6 +40,8 @@ const Borrow = {
     this.note = '';
     this.openModel = null;
     this.q = '';
+    this.draftAt = null;
+    this.droppedFromDraft = 0;
 
     Sheet.open({
       title: 'Tạo phiếu mượn',
@@ -44,8 +49,7 @@ const Borrow = {
       foot: '',
       steps: 1,
       stepLabel: 'Bước 1 / 3 · Chọn phòng ban rồi chọn nhân sự',
-      // Đã chọn người hoặc đã nhặt máy nào là coi như đang làm dở
-      guard: () => !!(Borrow.borrowerId || Borrow.selected.length || Borrow.note.trim()),
+      onClose: () => Borrow.persist(),
     });
 
     try {
@@ -73,7 +77,111 @@ const Borrow = {
       Sheet.setBody(errorBox(err));
       return;
     }
+    // Mở thẳng từ một máy cụ thể thì đó là ý định mới, không đụng bản nháp cũ
+    if (!preselectUnitId) this.restore();
     this.draw();
+  },
+
+  /* ---------- bản nháp ---------- */
+
+  /** Ghi lại những gì đang nhập dở. Gọi sau mỗi lần đổi và lúc đóng bảng. */
+  persist() {
+    if (!this.hasInput()) { Draft.clear('borrow'); return; }
+    Draft.save('borrow', {
+      step: this.step,
+      deptId: this.deptId,
+      borrowerId: this.borrowerId,
+      lenderId: this.lenderId,
+      borrowedOn: this.borrowedOn,
+      selected: this.selected,
+      note: this.note,
+      openModel: this.openModel,
+    });
+  },
+
+  /** Có gì đáng giữ lại không. Chọn xong người hoặc nhặt máy mới tính. */
+  hasInput() {
+    return !!(this.borrowerId || this.selected.length || this.note.trim());
+  },
+
+  /**
+   * Nạp lại bản nháp. Máy nào trong bản nháp đã bị người khác mượn mất, hoặc
+   * đã xoá khỏi hệ thống, thì bỏ ra và đếm lại để báo cho người dùng biết.
+   */
+  restore() {
+    const box = Draft.load('borrow');
+    if (!box || !box.data) return;
+    const d = box.data;
+
+    const staffOk = (id) => this.staff.some((s) => s.id === id);
+    if (staffOk(d.borrowerId)) this.borrowerId = d.borrowerId;
+    if (this.departments.some((x) => x.id === d.deptId)) this.deptId = d.deptId;
+    if (this.lenders.some((s) => s.id === d.lenderId)) this.lenderId = d.lenderId;
+    if (d.borrowedOn && d.borrowedOn <= todayISO()) this.borrowedOn = d.borrowedOn;
+    this.note = String(d.note || '');
+
+    const wanted = Array.isArray(d.selected) ? d.selected : [];
+    const still = wanted.filter((id) => {
+      const u = this.units.find((x) => x.id === id);
+      return u && u.status === 'AVAIL';
+    });
+    this.droppedFromDraft = wanted.length - still.length;
+    this.selected = still;
+    if (this.models.some((m) => m.id === d.openModel)) this.openModel = d.openModel;
+
+    if (!this.hasInput()) { Draft.clear('borrow'); return; }
+    this.draftAt = box.at;
+    // Quay về bước có dữ liệu gần nhất, nhưng không nhảy quá chỗ còn thiếu
+    this.step = (d.step === 3 && this.selected.length) ? 3
+      : (d.step >= 2 && this.borrowerId) ? 2 : 1;
+  },
+
+  /** Xoá sạch mọi thứ đang nhập, cả trong bộ nhớ lẫn bản nháp đã lưu. */
+  clearState() {
+    Draft.clear('borrow');
+    this.step = 1;
+    this.deptId = null;
+    this.borrowerId = null;
+    this.borrowedOn = todayISO();
+    this.selected = [];
+    this.note = '';
+    this.openModel = null;
+    this.q = '';
+    this.draftAt = null;
+    this.droppedFromDraft = 0;
+    const self = this.lenders.find((x) => x.full_name === ME.fullName);
+    this.lenderId = self ? self.id : (this.lenders[0] && this.lenders[0].id) || null;
+  },
+
+  /** Nút "Làm mới": bỏ hết, quay về phiếu trắng, bảng vẫn mở. */
+  resetDraft() {
+    this.clearState();
+    this.draw();
+    toast('Đã làm mới, bắt đầu phiếu trắng.');
+  },
+
+  /** Dải nhắc ở đầu bảng. Chỉ hiện khi thật sự có dữ liệu đang giữ. */
+  draftBar() {
+    if (!this.hasInput()) return '';
+    const what = [];
+    if (this.borrowerId) {
+      const p = this.staff.find((x) => x.id === this.borrowerId);
+      if (p) what.push(p.full_name);
+    }
+    if (this.selected.length) what.push(`${this.selected.length} máy`);
+    const dropped = this.droppedFromDraft
+      ? `<br>${this.droppedFromDraft} máy đã có người mượn mất, đã bỏ khỏi phiếu.` : '';
+    const head = this.draftAt
+      ? `Đang tiếp tục phiếu lập dở lúc ${draftWhen(this.draftAt)}`
+      : 'Phiếu đang lập — tự lưu lại nếu đóng giữa chừng';
+
+    return `<div class="draftbar">
+      <div class="tx"><b>${esc(head)}</b>${esc(what.join(' · '))}${dropped}</div>
+      <button onclick="Borrow.resetDraft()" title="Bỏ hết và bắt đầu lại">
+        <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4"/></svg>
+        Làm mới
+      </button>
+    </div>`;
   },
 
   go(step) { this.step = step; this.draw(); },
@@ -88,12 +196,14 @@ const Borrow = {
     if (this.step === 1) this.drawStep1();
     else if (this.step === 2) this.drawStep2();
     else this.drawStep3();
+    this.persist();
   },
 
   /* ---------- bước 1: phòng ban → nhân sự ---------- */
 
   drawStep1() {
     Sheet.setBody(`
+      ${this.draftBar()}
       <div class="search" style="margin-bottom:12px">
         <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
         <input id="bq" placeholder="Hoặc gõ thẳng tên nhân sự…" value="${esc(this.q)}"
@@ -103,7 +213,7 @@ const Borrow = {
       <h2 class="sec">Người cho mượn${this.lenderFallback
         ? '' : ' · ' + esc(LENDER_DEPT)}</h2>
       <div class="field" style="margin:0">
-        <select onchange="Borrow.lenderId=+this.value">
+        <select onchange="Borrow.lenderId=+this.value;Borrow.persist()">
           ${this.lenders.map((s) => `<option value="${s.id}" ${
             s.id === this.lenderId ? 'selected' : ''}>${esc(s.full_name)}${
             s.department_name ? ' · ' + esc(s.department_name) : ''}</option>`).join('')}
@@ -163,18 +273,27 @@ const Borrow = {
   },
 
   pickPerson(id) {
+    const wasEmpty = !this.hasInput();
     this.borrowerId = id;
     const s = this.staff.find((x) => x.id === id);
     if (s) this.deptId = s.department_id;
     this.drawPeople();
     const next = $('bnext');
     if (next) next.disabled = false;
+    // Lần chọn người đầu tiên làm dải nhắc xuất hiện, phải vẽ lại cả bước
+    if (wasEmpty) this.drawStep1();
+    else {
+      const bar = document.querySelector('#sheetBody .draftbar');
+      if (bar) bar.outerHTML = this.draftBar();
+    }
+    this.persist();
   },
 
   /* ---------- bước 2: chọn từng máy ---------- */
 
   drawStep2() {
     Sheet.setBody(`
+      ${this.draftBar()}
       <div class="quick">
         <input id="bcode" placeholder="Nhập mã máy, VD: LAP-07" autocapitalize="characters"
                onkeydown="if(event.key==='Enter'){event.preventDefault();Borrow.quickAdd()}">
@@ -191,6 +310,10 @@ const Borrow = {
       <div id="bmodels"></div>`);
     this.drawSelected();
     this.drawModels();
+    // Trên máy tính đưa con trỏ vào sẵn ô mã: súng quét cắm USB bắn thẳng vào
+    // đây là xong, không phải bấm chuột trước. Điện thoại thì không, kẻo bàn
+    // phím ảo bật lên che mất danh sách máy.
+    if (isWide()) { const box = $('bcode'); if (box) box.focus(); }
     Sheet.setFoot(`<button class="btn ghost" onclick="Borrow.go(1)">Quay lại</button>
       <button class="btn" id="bnext" onclick="Borrow.go(3)" ${
         this.selected.length ? '' : 'disabled'}>Tiếp tục</button>`);
@@ -293,6 +416,10 @@ const Borrow = {
     this.drawModels();
     const next = $('bnext');
     if (next) next.disabled = !this.selected.length;
+    // Dải nhắc đổi theo số máy đã chọn, nên vẽ lại luôn cho khớp
+    const bar = document.querySelector('#sheetBody .draftbar');
+    if (bar) bar.outerHTML = this.draftBar();
+    this.persist();
   },
 
   drawSelected() {
@@ -357,6 +484,7 @@ const Borrow = {
     });
 
     Sheet.setBody(`
+      ${this.draftBar()}
       <div class="card" style="margin-bottom:16px">
         <dl class="kv" style="margin:0">
           <dt>Người mượn</dt><dd>${esc(person ? person.full_name : '—')}<br>
@@ -378,7 +506,7 @@ const Borrow = {
       <div class="field" style="margin-top:16px">
         <label for="bnote">Ghi chú</label>
         <textarea id="bnote" placeholder="Ví dụ: mang đi công tác Đà Nẵng…"
-                  oninput="Borrow.note=this.value">${esc(this.note)}</textarea>
+                  oninput="Borrow.note=this.value;Borrow.persist()">${esc(this.note)}</textarea>
       </div>
 
       <h2 class="sec">Danh sách máy bàn giao</h2>
@@ -400,6 +528,7 @@ const Borrow = {
     this.borrowedOn = (!value || value > today) ? today : value;
     const box = $('bdate');
     if (box && box.value !== this.borrowedOn) box.value = this.borrowedOn;
+    this.persist();
   },
 
   async submit(button) {
@@ -411,11 +540,17 @@ const Borrow = {
         note: this.note.trim() || null,
         borrowed_at: isoAtNoonUTC(this.borrowedOn),
       }));
+      // Lấy lời nhắn TRƯỚC khi dọn, vì dọn xong là mất người mượn và số máy
+      const person = this.staff.find((s) => s.id === this.borrowerId);
+      const done = `Đã tạo phiếu #${ticket.code} — ${this.selected.length} máy cho ${
+        person ? person.full_name : ''}. Email đã gửi tới trưởng bộ phận.`;
+
+      // Phiếu đã nộp: dọn sạch bộ nhớ TRƯỚC khi đóng, vì lúc đóng bảng còn
+      // chạy persist() một lần nữa — không dọn thì nó lưu lại đúng phiếu vừa nộp.
+      this.clearState();
       Sheet.close();
       Cache.clear('models', 'staff');
-      const person = this.staff.find((s) => s.id === this.borrowerId);
-      toast(`Đã tạo phiếu #${ticket.code} — ${this.selected.length} máy cho ${
-        person ? person.full_name : ''}. Email đã gửi tới trưởng bộ phận.`);
+      toast(done);
       Loans.tab = 'open';
       openScreen('loans');
       refreshBackground();
@@ -449,8 +584,7 @@ const Return = {
   async open(code, onlyUnitId = null) {
     this.code = code;
     this.single = !!onlyUnitId;
-    Sheet.open({ title: 'Đang tải…', body: loadingBox(), foot: '',
-      guard: () => Return.lines.some((l) => l.note.trim() || l.condition !== 'NORMAL') });
+    Sheet.open({ title: 'Đang tải…', body: loadingBox(), foot: '' });
 
     try {
       const [ticket, staff] = await Promise.all([
@@ -615,9 +749,7 @@ const AddDevice = {
     this.brand = ''; this.info = ''; this.note = '';
     this.photos = [];
 
-    Sheet.open({ title: 'Thêm máy mới', body: loadingBox(), foot: '',
-      guard: () => !!(AddDevice.name.trim() || AddDevice.code.trim()
-        || AddDevice.note.trim() || AddDevice.photos.length) });
+    Sheet.open({ title: 'Thêm máy mới', body: loadingBox(), foot: '' });
     try {
       this.models = await loadModels();
     } catch (err) {
@@ -1061,9 +1193,7 @@ const StockImport = {
   open() {
     this.product = ''; this.brand = ''; this.model = '';
     this.qty = 1; this.condition = 'Hàng mới'; this.note = ''; this.photos = [];
-    Sheet.open({ title: 'Phiếu nhập hàng', body: '', foot: '',
-      guard: () => !!(StockImport.product.trim() || StockImport.note.trim()
-        || StockImport.photos.length) });
+    Sheet.open({ title: 'Phiếu nhập hàng', body: '', foot: '' });
     this.draw();
   },
 
@@ -1146,9 +1276,7 @@ const StockExport = {
 
   async open(presetJson = null) {
     this.qty = 1; this.purpose = 'Bán'; this.destination = ''; this.note = ''; this.photos = [];
-    Sheet.open({ title: 'Phiếu xuất hàng', body: loadingBox(), foot: '',
-      guard: () => !!(StockExport.destination.trim() || StockExport.note.trim()
-        || StockExport.photos.length) });
+    Sheet.open({ title: 'Phiếu xuất hàng', body: loadingBox(), foot: '' });
     try {
       const all = await apiGet('stock/levels');
       this.levels = all.filter((r) => r.on_hand > 0);
@@ -1451,11 +1579,7 @@ const NewUser = {
     this.draft = [];
     this.active = true;
 
-    Sheet.open({ title: 'Tạo tài khoản', body: loadingBox(), foot: '',
-      guard: () => {
-        const t = NewUser.read();
-        return !!(t.username.trim() || t.fullName.trim() || NewUser.draft.length);
-      } });
+    Sheet.open({ title: 'Tạo tài khoản', body: loadingBox(), foot: '' });
     try {
       this.catalog = this.catalog || await apiGet('users/permission-catalog');
     } catch (err) {

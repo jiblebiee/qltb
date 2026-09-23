@@ -18,9 +18,9 @@ from sqlalchemy.orm import Session
 from .. import schemas_v2 as sc
 from ..db import get_db
 from ..models import User
-from ..models_v2 import Photo, PhotoOwner, StockExport, StockImport
+from ..models_v2 import Photo, PhotoOwner, StockExport, StockImport, StockLocation
 from ..security import require_perm
-from ..services.photo_service import attach_photos, photo_payload_many
+from ..services.photo_service import attach_photos, photo_payload_many, signed_url
 
 router = APIRouter(prefix="/api/v2/stock", tags=["stock"])
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -34,9 +34,16 @@ def _users(db: Session, ids: set[int]) -> dict[int, User]:
 
 
 def _stock_levels(db: Session) -> list[sc.StockLevelOut]:
-    """Tồn kho = tổng nhập − tổng xuất, tính theo cặp (tên sản phẩm, model)."""
+    """
+    Một dòng cho mỗi mặt hàng đang lưu kho, gom theo cặp (tên sản phẩm, model).
+
+    Tồn kho = tổng nhập − tổng xuất. Ngày nhập lấy lần nhập gần nhất. Chỗ để
+    và ảnh chỗ để lấy từ bảng `stock_locations`, mặt hàng chưa khai thì để trống.
+    Ba truy vấn gom nhóm chứ không phải một truy vấn cho mỗi mặt hàng.
+    """
     imports = db.execute(
-        select(StockImport.product_name, StockImport.model_code, func.sum(StockImport.qty))
+        select(StockImport.product_name, StockImport.model_code,
+               func.sum(StockImport.qty), func.max(StockImport.imported_at))
         .group_by(StockImport.product_name, StockImport.model_code)
     ).all()
     exports = dict(
@@ -46,13 +53,21 @@ def _stock_levels(db: Session) -> list[sc.StockLevelOut]:
             .group_by(StockExport.product_name, StockExport.model_code)
         ).all()
     )
+    places = {
+        (r.product_name, r.model_code): r
+        for r in db.execute(select(StockLocation)).scalars().all()
+    }
     out = []
-    for name, code, total in imports:
+    for name, code, total, last_in in imports:
         imported = int(total or 0)
         exported = exports.get((name, code), 0)
+        place = places.get((name, code))
         out.append(sc.StockLevelOut(
             product_name=name, model_code=code,
             imported=imported, exported=exported, on_hand=imported - exported,
+            last_in=last_in,
+            location=place.location if place else None,
+            image_url=signed_url(place.image_key) if place and place.image_key else None,
         ))
     return sorted(out, key=lambda r: r.product_name.lower())
 
@@ -77,6 +92,10 @@ def stock_levels(db: Session = Depends(get_db)):
     return _stock_levels(db)
 
 
+# Dưới ngưỡng này thì coi là sắp hết, cần nhập thêm
+LOW_STOCK = 3
+
+
 @router.get("/summary", dependencies=[Depends(require_perm("import_export.view"))])
 def stock_summary(db: Session = Depends(get_db)):
     imported = db.execute(select(func.coalesce(func.sum(StockImport.qty), 0))).scalar_one()
@@ -88,7 +107,117 @@ def stock_summary(db: Session = Depends(get_db)):
         "on_hand": int(imported or 0) - int(exported or 0),
         "products": len(levels),
         "out_of_stock": sum(1 for r in levels if r.on_hand <= 0),
+        "low_stock": sum(1 for r in levels if 0 < r.on_hand <= LOW_STOCK),
+        "low_threshold": LOW_STOCK,
         "purposes": PURPOSES,
+    }
+
+
+@router.put("/location", dependencies=[Depends(require_perm("import_export.update"))])
+def set_location(payload: sc.LocationUpdate, request: Request, db: Session = Depends(get_db)):
+    """
+    Khai chỗ để của một mặt hàng trong kho, kèm một tấm ảnh chụp chỗ đó.
+
+    Mỗi mặt hàng một dòng: gọi lại lần nữa là sửa chứ không thêm dòng mới. Để
+    trống ô chỗ để và không gửi ảnh mới thì coi như xoá khai báo cũ.
+    """
+    name = payload.product_name.strip()
+    code = payload.model_code.strip().upper()
+    if not _known_product(db, name, code):
+        raise HTTPException(404, "Không có mặt hàng này trong kho")
+
+    row = db.execute(
+        select(StockLocation).where(StockLocation.product_name == name,
+                                    StockLocation.model_code == code)
+    ).scalar_one_or_none()
+    if row is None:
+        row = StockLocation(product_name=name, model_code=code)
+        db.add(row)
+
+    row.location = (payload.location or "").strip() or None
+    row.note = (payload.note or "").strip() or None
+    # Không gửi ảnh mới thì giữ nguyên ảnh cũ; gửi chuỗi rỗng mới là xoá ảnh.
+    if payload.image_key is not None:
+        row.image_key = payload.image_key.strip() or None
+    row.updated_by_user_id = getattr(request.state, "user_id", None)
+    row.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {"product_name": name, "model_code": code, "location": row.location,
+            "note": row.note,
+            "image_url": signed_url(row.image_key) if row.image_key else None}
+
+
+def _known_product(db: Session, name: str, code: str) -> bool:
+    return db.execute(
+        select(StockImport.id)
+        .where(StockImport.product_name == name, StockImport.model_code == code)
+        .limit(1)
+    ).first() is not None
+
+
+@router.get("/product", dependencies=[Depends(require_perm("import_export.view"))])
+def product_history(name: str = Query(..., max_length=255),
+                    code: str = Query(..., max_length=120),
+                    db: Session = Depends(get_db)):
+    """
+    Lịch sử ra vào của MỘT mặt hàng: mọi phiếu nhập, mọi phiếu xuất, và số tồn.
+
+    Đây là phần tab Nhập / Xuất còn thiếu — trước chỉ lập được phiếu, không tra
+    được một mặt hàng đã vào ra những lần nào, ai lập, đi đâu.
+    """
+    imports = db.execute(
+        select(StockImport)
+        .where(StockImport.product_name == name, StockImport.model_code == code)
+        .order_by(StockImport.imported_at.desc(), StockImport.id.desc())
+    ).scalars().all()
+    exports = db.execute(
+        select(StockExport)
+        .where(StockExport.product_name == name, StockExport.model_code == code)
+        .order_by(StockExport.exported_at.desc(), StockExport.id.desc())
+    ).scalars().all()
+    if not imports and not exports:
+        raise HTTPException(404, "Không có mặt hàng này trong kho")
+
+    users = _users(db, {r.created_by_user_id for r in imports} |
+                       {r.created_by_user_id for r in exports})
+
+    def who(uid):
+        u = users.get(uid)
+        return u.full_name or u.username if u else None
+
+    total_in = sum(int(r.qty or 0) for r in imports)
+    total_out = sum(int(r.qty or 0) for r in exports)
+
+    # Một dòng thời gian duy nhất, mới nhất lên đầu
+    moves = [
+        {"kind": "IN", "id": r.id, "qty": int(r.qty or 0), "at": r.imported_at,
+         "who": who(r.created_by_user_id), "note": r.note,
+         "detail": r.condition, "brand": r.brand}
+        for r in imports
+    ] + [
+        {"kind": "OUT", "id": r.id, "qty": int(r.qty or 0), "at": r.exported_at,
+         "who": who(r.created_by_user_id), "note": r.note,
+         "detail": r.purpose, "to": r.destination}
+        for r in exports
+    ]
+    moves.sort(key=lambda m: (m["at"], m["id"]), reverse=True)
+
+    place = db.execute(
+        select(StockLocation).where(StockLocation.product_name == name,
+                                    StockLocation.model_code == code)
+    ).scalar_one_or_none()
+
+    return {
+        "location": place.location if place else None,
+        "location_note": place.note if place else None,
+        "image_url": signed_url(place.image_key) if place and place.image_key else None,
+        "product_name": name, "model_code": code,
+        "brand": next((r.brand for r in imports if r.brand), None),
+        "imported": total_in, "exported": total_out, "on_hand": total_in - total_out,
+        "first_in": imports[-1].imported_at if imports else None,
+        "last_move": moves[0]["at"] if moves else None,
+        "moves": moves,
     }
 
 
@@ -243,6 +372,8 @@ def export_excel(db: Session = Depends(get_db)):
     levels = pd.DataFrame([{
         "Sản phẩm": r.product_name, "Model": r.model_code,
         "Tổng nhập": r.imported, "Đã xuất": r.exported, "Tồn kho": r.on_hand,
+        "Ngày nhập": r.last_in.strftime("%d/%m/%Y") if r.last_in else "",
+        "Vị trí kho": r.location or "",
     } for r in _stock_levels(db)])
 
     imports = pd.DataFrame([{

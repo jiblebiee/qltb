@@ -18,6 +18,7 @@ Cài đặt và vận hành máy chủ: xem [CAI-DAT.md](CAI-DAT.md).
 6. [Quá hạn và email](#6-quá-hạn-và-email)
 7. [Bảo trì và máy hỏng](#7-bảo-trì-và-máy-hỏng)
 8. [Nhập / Xuất kho hàng bán](#8-nhập--xuất-kho-hàng-bán)
+   · [Kho hàng](#8b-kho-hàng--bảng-thống-kê-hàng-đang-lưu-kho)
 9. [Nhân sự và phòng ban](#9-nhân-sự-và-phòng-ban)
 10. [Tài khoản và phân quyền](#10-tài-khoản-và-phân-quyền)
 11. [Giao diện](#11-giao-diện)
@@ -99,16 +100,49 @@ chú cũ tự mất.
 Cột **QR** trong bảng Thiết bị hiện sẵn mã QR của từng loại. Bấm vào ô QR đó mở
 bảng xem lớn, trong đó có hai kiểu in:
 
-| Kiểu tem | Nội dung | Dán ở đâu |
+| Kiểu tem | In ra mấy tem | Dán ở đâu |
 |---|---|---|
-| **Tem từng máy** | Mỗi máy một tem mang mã riêng (`LAP-01`, `LAP-02`…) | Dán lên chính máy đó |
-| **Một tem mã loại** | Một tem mang mã loại (`LAP`) | Dán lên thùng hoặc kệ chứa cả lô |
+| **Tem từng máy** | Mỗi máy một tem | Dán lên chính máy đó |
+| **Tem mã loại** | 2 tem giống nhau, đúng một lần đẩy giấy | Dán lên thùng hoặc kệ chứa cả lô |
 
-Trang tem mở ở thẻ mới, khổ **50 × 30 mm**, bấm **In** hoặc Ctrl+P. In ra giấy
-decal A4 rồi cắt theo nét đứt.
+### Trên tem có gì
 
-QR chỉ chứa đúng mã máy, **không nhúng địa chỉ máy chủ** — sau này đổi IP hay
-tên miền thì tem cũ vẫn quét được.
+Chỉ hai thứ: **mã QR** và **tên thiết bị**. Mã thiết bị nằm trong QR, không in
+ra bằng chữ — QR chỉ để máy quét đọc khi lập phiếu mượn, còn người nhìn bằng mắt
+chỉ cần biết đó là máy gì. Bỏ dòng mã đi thì cái tên được dùng hết chỗ, tên dài
+60 ký tự vẫn in đủ.
+
+QR chỉ chứa đúng mã, **không nhúng địa chỉ máy chủ** — sau này đổi IP hay tên
+miền thì tem cũ vẫn quét được.
+
+### Giấy và máy in
+
+| Mục | Giá trị |
+|---|---|
+| Giấy | Decal barcode 2 tem, khổ **98mm** |
+| Một tem | **50 × 30 mm** (ô in 49mm, chừa mép an toàn) |
+| Mỗi lần đẩy giấy | **2 tem** |
+| Máy in | **Godex Z530** |
+
+Trang tem được dựng đúng **một hàng = một trang giấy**, nên máy đẩy ra bao nhiêu
+lần là bấy nhiêu hàng, không lệch tem.
+
+Trong hộp thoại in phải đặt: khổ giấy **98 × 30 mm**, lề **0**, tỉ lệ **100%**,
+tắt đầu trang / chân trang. Đặt sai tỉ lệ là QR co lại, máy quét đọc không ra.
+
+Số tem lẻ thì tem cuối nằm bên trái, ô bên phải để trống.
+
+### In toàn bộ thiết bị
+
+Nút **In tem toàn bộ** ở thanh công cụ tab Thiết bị. Vì việc này chạy liên tục
+rất lâu nên hệ thống chặn hai lớp:
+
+1. Hỏi lại ngay khi bấm, kèm con số thật: bao nhiêu máy, bao nhiêu lần đẩy giấy,
+   tốn khoảng bao nhiêu mét decal.
+2. Trang tem mở ra với nút In **bị khoá**, phải tick *"Đã kiểm tra giấy, cho in
+   liên tục"* mới bấm được.
+
+Lô nhỏ (từ 10 tem trở xuống) thì không hỏi gì, bấm In là chạy.
 
 ### Camera và địa chỉ http
 
@@ -170,8 +204,9 @@ Nút **Tạo phiếu mượn**, ba bước:
    chính tài khoản đang đăng nhập nếu người đó thuộc phòng IT.
 2. **Chọn máy** — ba cách, dùng lẫn nhau được:
    * **Quét mã** — nút vuông có góc ngắm cạnh ô nhập mã. Đưa tem QR trên máy vào
-     khung, quét xong một máy là thêm ngay rồi quét tiếp máy sau, không phải mở
-     lại từng lần. Quét nhầm tem mã loại thì hệ thống mở đúng nhóm đó ra chọn tay.
+     khung camera, quét xong một máy là thêm ngay rồi quét tiếp máy sau, không
+     phải mở lại từng lần. Quét nhầm tem mã loại thì hệ thống mở đúng nhóm đó
+     ra chọn tay.
    * **Gõ mã** — nhập `LAP-07` rồi Enter.
    * **Bấm chọn** — mở từng loại, bấm vào ô máy còn Sẵn sàng.
    Một phiếu chứa được nhiều máy thuộc nhiều loại khác nhau.
@@ -275,13 +310,14 @@ tạo tay.
 Kho này dành cho **hàng hoá kinh doanh** — mua về để bán, hoàn toàn không liên
 quan tới thiết bị cho mượn.
 
-Ba mục:
+Hai mục:
 
-- **Tồn kho** — mỗi mặt hàng một dòng: đã nhập, đã xuất, còn lại. Tồn kho =
-  tổng nhập − tổng xuất, tính theo từng cặp *tên sản phẩm + model*.
 - **Phiếu nhập** — từng lô hàng mua về, kèm hãng, tình trạng hàng và ảnh.
 - **Phiếu xuất** — mỗi lần bán hoặc cấp đi, có mục đích và nơi nhận, trừ thẳng
   vào tồn.
+
+Đây là nơi **ghi chép** hàng vào hàng ra. Còn muốn nhìn toàn kho đang có những
+gì thì sang mục **Kho hàng** — mục 8b ngay dưới đây.
 
 Nhập tay từng phiếu, chụp ảnh sản phẩm được. **Model** dùng để gộp tồn kho, nên
 nhập thống nhất giữa các lần — "RT-AX3000" và "RT AX3000" sẽ bị tính thành hai
@@ -289,6 +325,61 @@ mặt hàng khác nhau.
 
 Mọi phiếu nhập và xuất đều **ghi lại tài khoản người thực hiện**, xem được
 trong chi tiết phiếu.
+
+---
+
+## 8b. Kho hàng — bảng thống kê hàng đang lưu kho
+
+Mục **Nhập / Xuất** chỉ lập phiếu. Mục **Kho hàng** trả lời câu hỏi khác: *kho
+đang có những gì, mỗi thứ còn bao nhiêu, để ở đâu.* Số liệu đổ thẳng từ các
+phiếu bên kia sang, không phải nhập lại lần nữa.
+
+Mở ra là bốn con số của cả kho: **tồn kho**, **đã nhập**, **đã xuất** và **cần
+nhập thêm**. Ô cuối bấm được — nhảy thẳng sang danh sách những mặt hàng đã hết
+hoặc còn từ 3 trở xuống.
+
+Dưới đó là bảng, mỗi dòng một mặt hàng:
+
+| Cột | Nghĩa |
+|---|---|
+| Tên hàng hoá | Tên và model. **Model** là thứ dùng để gộp, nhập thống nhất giữa các lần |
+| Số lượng | Tổng đã nhập về từ trước tới nay |
+| Ngày nhập | Lần nhập **gần nhất** của mặt hàng đó |
+| Vị trí kho | Chỗ để đã khai, ví dụ "Kệ A3 — tầng 2" |
+| Số lượng tồn | Đang có trong kho = tổng nhập − tổng xuất |
+| Đã xuất | Tổng đã bán hoặc cấp đi |
+| Còn lại | Còn bao nhiêu trên tổng đã nhập, hết hàng thì hiện đỏ |
+| Ảnh vị trí | Ảnh chụp chỗ để, bấm vào xem to |
+
+Trên bảng có ô tìm và ba bộ lọc:
+
+| Công cụ | Làm gì |
+|---|---|
+| Ô tìm | Lọc theo tên hàng hoá, model hoặc vị trí kho, gõ tới đâu lọc tới đó |
+| Lọc mặt hàng | Tất cả · Sắp hết · Hết hàng |
+| Lọc vị trí kho | Mọi vị trí · Chưa khai vị trí · từng vị trí đã khai |
+| Sắp xếp | Tồn nhiều nhất · Xuất nhiều nhất · Nhập nhiều nhất · Nhập gần đây · Tên A→Z |
+
+Hai nút bên phải: **Xuất Excel** tải cả kho ra ba sheet, **Phiếu nhập / xuất**
+mở thẳng sang mục Nhập / Xuất để lập phiếu.
+
+### Khai vị trí và chụp ảnh chỗ để
+
+**Bấm vào một mặt hàng** mở ra chi tiết: tổng nhập, tổng xuất, tồn hiện tại,
+ngày nhập lần đầu, ô khai vị trí, và lịch sử từng lần vào ra — ngày nào, bao
+nhiêu, ai lập phiếu, hàng đi đâu. Bấm tiếp một dòng lịch sử là mở đúng phiếu
+gốc. Từ đây xuất hàng thẳng được, không phải quay lại mục Phiếu xuất.
+
+Ô **Vị trí trong kho** có ba thứ:
+
+- **Chỗ để** — gõ tên kệ, tầng, ô… rồi bấm **Lưu vị trí**.
+- **Ghi chú** — chỉ dẫn thêm, ví dụ "hộp ngoài cùng bên trái".
+- **Chụp ảnh chỗ để** — một tấm ảnh, lưu ngay khi chụp xong. Người mới vào kho
+  nhìn ảnh là tìm ra, không phải hỏi ai.
+
+Mỗi mặt hàng giữ một vị trí và một ảnh; khai lại lần nữa là **sửa đè**, không
+đẻ thêm dòng. Cần quyền *Nhập / Xuất — sửa* mới khai được; người chỉ có quyền
+xem thì đọc thôi.
 
 ---
 
@@ -413,12 +504,25 @@ Nút hình **mặt trăng / mặt trời** ở thanh tiêu đề, cạnh nút th
 
 Chưa bấm bao giờ thì hệ thống đi theo thiết lập sáng / tối của máy.
 
-### Lỡ bấm ra ngoài khi đang lập phiếu
+### Phiếu mượn lập dở được giữ lại
 
-Phiếu đang nhập dở mà bấm nhầm ra vùng tối bên ngoài thì bảng **không đóng** —
-nó chỉ lắc nhẹ và nhắc. Muốn bỏ thật thì bấm **✕** ở góc, và hệ thống còn hỏi
-lại một câu nữa. Áp dụng cho phiếu mượn, nhận trả, thêm máy, phiếu nhập, phiếu
-xuất và tạo tài khoản.
+Đang lập phiếu mà đóng bảng, bấm ra ngoài, hay lỡ tải lại trang thì **không mất
+gì**. Mở "Tạo phiếu mượn" lần sau, hệ thống trả lại đúng người mượn, đúng những
+máy đã chọn, ghi chú và ngày mượn, và nhảy về đúng bước đang dở.
+
+Đầu bảng có dải nhắc cam ghi rõ đang tiếp tục phiếu lưu lúc nào, kèm nút **Làm
+mới** để bỏ hết và bắt đầu lại từ trắng.
+
+Vài điểm cần biết:
+
+- **Tạo phiếu xong là bản nháp tự xoá.** Lần mở sau bắt đầu trắng.
+- Máy trong bản nháp mà **người khác đã mượn mất** thì bị bỏ ra, dải nhắc ghi rõ
+  bỏ mấy máy — phiếu không bao giờ nộp nhầm máy đã có chủ.
+- Bản nháp nằm trong trình duyệt, **chỉ của riêng máy đó và riêng tài khoản đó**.
+  Đăng nhập bằng tài khoản khác trên cùng máy sẽ không thấy bản nháp của người
+  trước. Quá **7 ngày** thì bản nháp tự bỏ.
+- Bấm thẳng "Mượn máy này" từ một máy cụ thể là bắt đầu phiếu mới, không dính
+  bản nháp cũ.
 
 ### Nút Quay lại của trình duyệt
 

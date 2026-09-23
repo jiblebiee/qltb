@@ -8,14 +8,16 @@ app/routers/.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 from collections import defaultdict
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -33,7 +35,6 @@ from .models import Department, User
 from .security import PERMISSIONS_ALL, parse_permissions
 from .services import overdue_service
 from .services.weekly_report_service import (
-    send_monthly_loan_history_report_now, send_weekly_outstanding_report_now,
     start_weekly_report_scheduler, stop_weekly_report_scheduler,
 )
 
@@ -41,6 +42,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="IT-QLTB", docs_url=None, redoc_url=None, openapi_url="/openapi.json")
+
+# ---------------------------------------------------------------- nén
+# CSS và JS của giao diện là chữ thuần, nén gzip còn khoảng một phần tư. Một
+# dòng này cắt ~180KB mỗi lần mở trang — đáng kể trên mạng nội bộ chậm và trên
+# điện thoại. Dưới 1KB thì không nén, nén xong còn to hơn.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # ---------------------------------------------------------------- CORS
 _origins = [o.strip() for o in (settings.allow_origins or "").split(",") if o.strip()]
@@ -69,7 +76,31 @@ async def _startup() -> None:
     _bootstrap_admin()
     start_weekly_report_scheduler(app)
     overdue_service.start(app)
+    asyncio.create_task(_ensure_bucket_soon())
     logger.info("Ứng dụng sẵn sàng — ngưỡng quá hạn %s ngày", settings.loan_overdue_days)
+
+
+async def _ensure_bucket_soon() -> None:
+    """
+    Tạo bucket ảnh nếu chưa có, thử lại vài lần ở nền.
+
+    Chạy ở NỀN chứ không chặn lúc khởi động: kho ảnh thường lên chậm hơn ứng
+    dụng vài giây, và dù kho ảnh có chết hẳn thì mượn trả vẫn phải dùng được —
+    chỉ riêng phần tải ảnh là chịu.
+    """
+    from .s3 import ensure_bucket
+
+    for wait in (0, 3, 5, 10, 20, 30):
+        if wait:
+            await asyncio.sleep(wait)
+        try:
+            if await asyncio.to_thread(ensure_bucket):
+                return
+        except Exception as exc:                       # pragma: no cover
+            logger.warning("Lỗi khi tạo bucket: %s", exc)
+    logger.warning(
+        "Chưa tạo được bucket ảnh sau vài lần thử. Mượn trả vẫn chạy bình thường; "
+        "kiểm tra lại kho ảnh rồi khởi động lại dịch vụ web nếu cần tải ảnh.")
 
 
 @app.on_event("shutdown")

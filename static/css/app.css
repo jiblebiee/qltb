@@ -158,6 +158,27 @@ h2.sec .lnk{margin-left:auto;font-size:14px;font-weight:600;letter-spacing:0;tex
 .qlegend b{width:8px;height:8px;border-radius:2px;display:inline-block}
 .qlegend em{font-style:normal;font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--ink-2)}
 
+/* ===== kho hàng: vị trí để và ảnh chụp chỗ để ===== */
+.dash{color:var(--muted)}
+.sub2{display:block;font-size:13.5px;color:var(--muted);margin-top:2px}
+/* Ảnh trong bảng để nhỏ — người dùng liếc thấy đúng kệ là đủ, bấm mới xem to */
+.whshot{width:44px;height:34px;object-fit:cover;border-radius:7px;display:block;
+  border:1px solid var(--line);background:var(--sunk);cursor:zoom-in}
+.whfoot{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:10px}
+.placeval{font-size:17px;font-weight:600;margin-top:8px}
+.placeshot{position:relative;margin-top:12px;width:fit-content}
+.placeshot img{max-width:200px;max-height:150px;border-radius:11px;display:block;
+  border:1px solid var(--line);cursor:zoom-in}
+.placeshot .x{position:absolute;top:6px;right:6px;width:24px;height:24px;border-radius:50%;
+  border:0;background:rgba(10,14,14,.72);color:#fff;display:grid;place-items:center;cursor:pointer}
+.placeshot .x svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.6;stroke-linecap:round}
+.addshot{display:flex;align-items:center;gap:9px;padding:12px 15px;border-radius:12px;
+  border:1px dashed var(--line);background:var(--sunk);color:var(--ink-2);
+  font:inherit;font-size:15px;font-weight:600;cursor:pointer}
+.addshot:hover{border-color:var(--brand);color:var(--brand)}
+.addshot svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;
+  stroke-linecap:round;stroke-linejoin:round}
+
 .search{position:relative;margin-bottom:10px}
 .search svg{position:absolute;left:13px;top:50%;transform:translateY(-50%);
   width:17px;height:17px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round}
@@ -224,12 +245,18 @@ h2.sec .lnk{margin-left:auto;font-size:14px;font-weight:600;letter-spacing:0;tex
   border-radius:20px 20px 0 0;box-shadow:var(--sheet-shadow);display:none;max-height:93%;flex-direction:column}
 .sheet.on{display:flex;animation:up .22s cubic-bezier(.2,.8,.3,1)}
 @keyframes up{from{transform:translateY(100%)}to{transform:none}}
-/* Bấm nhầm ra ngoài khi đang lập phiếu dở: lắc nhẹ thay vì đóng mất dữ liệu */
-.sheet.nudge{animation:nudge .34s ease}
-@keyframes nudge{
-  0%,100%{transform:none}
-  20%{transform:translateX(-7px)} 45%{transform:translateX(6px)}
-  70%{transform:translateX(-3px)}}
+/* Dải nhắc "đang tiếp tục phiếu lập dở", kèm nút làm mới */
+.draftbar{display:flex;align-items:center;gap:11px;margin-bottom:14px;
+  background:var(--brand-soft);border:1px solid var(--brand);border-radius:12px;
+  padding:10px 11px 10px 13px}
+.draftbar .tx{flex:1;min-width:0;font-size:14.5px;line-height:1.4;color:var(--brand-ink)}
+.draftbar .tx b{display:block;font-size:15px;font-weight:600;color:var(--ink)}
+.draftbar button{flex:0 0 auto;border:1px solid var(--brand);background:var(--surface);
+  color:var(--brand-ink);border-radius:9px;padding:7px 12px;font-size:14px;font-weight:600;
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.draftbar button:hover{background:var(--brand);color:var(--btn-fg)}
+.draftbar button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
 .sheet .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:9px auto 0;flex:0 0 auto}
 .sheet .head{padding:12px 16px;border-bottom:1px solid var(--line);flex:0 0 auto;display:flex;align-items:center;gap:10px}
 .sheet .head h3{margin:0;font-size:19.5px;font-weight:700;letter-spacing:-.015em;flex:1;line-height:1.25}
@@ -356,6 +383,15 @@ h2.sec .lnk{margin-left:auto;font-size:14px;font-weight:600;letter-spacing:0;tex
 .qropt .btn{flex:1 1 180px;width:auto}
 .qrnote{font-size:14px;color:var(--muted);line-height:1.55;margin:12px 0 0}
 
+/* Ô chọn nhỏ trên thanh công cụ của bảng kho */
+.minisel{flex:0 0 auto;height:44px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);padding:0 11px;font-size:15px;
+  font-weight:500;cursor:pointer;max-width:190px}
+.minisel:hover{border-color:var(--brand)}
+@media (max-width:640px){.minisel{flex:1 1 44%;max-width:none}}
+
+
+
 .acc{background:var(--surface);border:1px solid var(--line-2);border-radius:13px;margin-bottom:8px;overflow:hidden}
 .acc .ah{display:flex;align-items:center;gap:11px;padding:12px 13px;cursor:pointer;
   width:100%;border:0;background:none;text-align:left}
@@ -455,7 +491,8 @@ h2.sec .lnk{margin-left:auto;font-size:14px;font-weight:600;letter-spacing:0;tex
 .slegend span{display:flex;align-items:center;gap:7px;color:var(--ink-2)}
 .slegend b{width:9px;height:9px;border-radius:3px;flex:0 0 9px}
 .slegend em{font-style:normal;margin-left:auto;font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--ink)}
-svg.bars{width:100%;height:132px;display:block;overflow:visible}
+/* Giới hạn bề ngang: kéo giãn quá 1.3 lần là chữ trục méo, nhìn ra ngay */
+svg.bars{width:100%;max-width:660px;height:132px;display:block;overflow:visible}
 svg.bars text{font-family:"IBM Plex Mono",monospace;font-size:11px;fill:var(--muted)}
 svg.bars line{stroke:var(--line);stroke-width:1}
 .blegend{display:flex;gap:16px;font-size:14.5px;color:var(--ink-2);margin-top:10px}
@@ -568,8 +605,6 @@ svg.bars line{stroke:var(--line);stroke-width:1}
 .btn.auth-go:hover{filter:brightness(1.08)}
 .btn.auth-go svg{width:17px;height:17px}
 
-.auth-alt{text-align:center;margin:16px 0 0;font-size:15.5px;font-weight:600;
-  color:var(--brand-ink)}
 .auth-foot{margin-top:26px;font-size:14px;color:var(--muted);text-align:center;line-height:1.6}
 
 .loginerr{background:var(--bad-bg);color:var(--bad);border-radius:11px;padding:11px 13px;
@@ -764,14 +799,7 @@ svg.bars line{stroke:var(--line);stroke-width:1}
 .thumb.pending{display:grid;place-items:center}
 .thumb.pending .spinner{border-color:var(--line);border-top-color:var(--muted)}
 
-/* nút chỉ có biểu tượng trong hàng tiêu đề */
-.secbtn{margin-left:auto;border:1px solid var(--line);background:var(--surface);
-  color:var(--ink-2);border-radius:9px;padding:5px 11px;font-size:14px;font-weight:600;
-  cursor:pointer;letter-spacing:0;text-transform:none}
 
-/* dải lọc dính khi cuộn */
-.sticky-tools{position:sticky;top:-16px;z-index:4;background:var(--bg);
-  padding:16px 0 4px;margin:-16px 0 0}
 
 /* ẩn theo quyền */
 [hidden]{display:none!important}

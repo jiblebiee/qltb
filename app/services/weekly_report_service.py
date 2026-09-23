@@ -28,15 +28,27 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from ..config import settings
 from ..db import SessionLocal
 from ..models import JobRun, Staff
-from ..models_v2 import DeviceUnit, LoanTicket, LoanTicketItem, UnitReturn
+from ..models_v2 import DeviceUnit, LoanTicket, UnitReturn
 from .email_service import send_email
-from .notification_service import manage_recipients
+
 
 logger = logging.getLogger(__name__)
 
 BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
+
+
+def manage_recipients() -> list[str]:
+    """
+    Địa chỉ nhận báo cáo tuần và báo cáo tháng, lấy từ EMAIL_MANAGE trong .env.
+
+    Trước nằm trong notification_service.py — module 138 dòng mà chỉ còn đúng
+    hàm này còn ai gọi, phần còn lại là mã của bản cũ. Dời về đây rồi xoá file.
+    """
+    raw = settings.email_manage or ""
+    return [item.strip() for item in raw.split(",") if item.strip()]
 WEEKLY_JOB = "weekly_outstanding_loans_report"
 MONTHLY_JOB = "monthly_loan_history_report"
 REPORT_HOUR = 8
@@ -121,8 +133,6 @@ def _html_table(headers: list[str], rows: list[list[str]]) -> str:
 
 def _outstanding_rows(db: Session, now: datetime | None = None) -> list[dict]:
     """Từng máy còn đang ở ngoài, kèm số ngày đã mượn."""
-    from ..config import settings
-
     tickets = db.execute(
         select(LoanTicket).options(selectinload(LoanTicket.items))
         .where(LoanTicket.returned_at.is_(None))

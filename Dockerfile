@@ -2,8 +2,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      build-essential curl \
+# Chỉ cần curl cho HEALTHCHECK. Không cài trình biên dịch: mọi gói trong
+# requirements.txt đều có sẵn bản dựng cho Linux x86_64, pip chỉ việc tải về.
+# Bỏ build-essential giúp ảnh nhẹ hơn ~250MB và dựng nhanh hơn vài phút.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

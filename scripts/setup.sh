@@ -514,8 +514,126 @@ write_env_external() {
 
 # ---------------------------------------------------------------- khởi chạy
 
+# Mọi ảnh nền cần có trước khi dựng: ảnh gốc trong Dockerfile, cộng các ảnh
+# dịch vụ khai báo trong file compose. Tải sẵn hết thì bước build và bước up
+# không phải ra mạng nữa.
+images_for() {
+  grep -oE '^FROM[[:space:]]+\S+' "$ROOT/Dockerfile" 2>/dev/null | awk '{print $2}'
+  case "$1" in
+    "$COMPOSE_FULL") grep -oE '^[[:space:]]+image:[[:space:]]*\S+' "$1" | awk '{print $2}' ;;
+  esac
+}
+
+# Kho ảnh dự phòng, xếp theo thứ tự ưu tiên.
+#
+# Docker Hub chặn tải ẩn danh khi vượt hạn mức, và ở nhiều mạng tại Việt Nam
+# còn bị chặn hẳn. Cả ba kho dưới đây đều là kho CHÍNH THỨC, không cần đăng
+# nhập, không có hạn mức ẩn danh:
+#
+#   public.ecr.aws/docker/library/*  — AWS soi gương bộ ảnh chính thức của Docker
+#   mirror.gcr.io/library/*          — Google soi gương Docker Hub
+#   quay.io/minio/*                  — MinIO tự phát hành song song
+mirrors_of() {
+  local img="$1"
+  case "$img" in
+    minio/*)
+      printf 'quay.io/%s\n' "$img" ;;
+    */*)
+      : ;;                                  # ảnh của bên thứ ba khác: chịu
+    *)
+      # Ảnh chính thức, không có dấu / — mysql:8.0, python:3.12-slim…
+      printf 'public.ecr.aws/docker/library/%s\n' "$img"
+      printf 'mirror.gcr.io/library/%s\n' "$img" ;;
+  esac
+}
+
+# Tải một ảnh, thử lại vài lần. Docker Hub hay trả lỗi nhất thời khi máy vừa
+# tải liên tiếp nhiều ảnh, nghỉ vài giây rồi thử lại là qua.
+pull_one() {
+  local img="$1" tries=3 n=1 out mirror
+  while (( n <= tries )); do
+    if out=$($DOCKER_SUDO docker pull "$img" 2>&1); then
+      ok "$img"
+      return 0
+    fi
+    (( n < tries )) && { info "Tải $img lỗi, thử lại lần $((n+1))/$tries sau 5 giây…"; sleep 5; }
+    (( n++ ))
+  done
+
+  # Docker Hub không cho thì đi vòng qua kho dự phòng, rồi gắn lại đúng tên mà
+  # compose đang gọi — compose thấy ảnh đã có sẵn nên không tải lại nữa.
+  while read -r mirror; do
+    [[ -z "$mirror" ]] && continue
+    info "Docker Hub không cho tải. Thử kho dự phòng $mirror…"
+    if $DOCKER_SUDO docker pull "$mirror" >/dev/null 2>&1 \
+       && $DOCKER_SUDO docker tag "$mirror" "$img" >/dev/null 2>&1; then
+      ok "$img (lấy từ $mirror)"
+      return 0
+    fi
+  done <<< "$(mirrors_of "$img")"
+
+  fail "Không tải được $img"
+  printf '%s\n' "$out" | tail -2
+  # Lỗi này gần như luôn là hạn mức tải ẩn danh của Docker Hub, chứ không phải
+  # ảnh không tồn tại — nói thẳng ra để khỏi đi tìm nhầm hướng.
+  if grep -qiE 'pull access denied|toomanyrequests|unauthorized|rate limit' <<< "$out"; then
+    echo
+    info "Ảnh này CÓ tồn tại. Câu \"repository does not exist\" là thông báo chung"
+    info "của Docker cho mọi lỗi 401 — ở đây là Docker Hub không cho máy chưa"
+    info "đăng nhập tải thêm, hoặc mạng công ty chặn Docker Hub."
+    info "Cách xử lý, chọn một:"
+    info "  1) Đăng nhập rồi chạy lại:   docker login"
+    info "  2) Đợi khoảng 6 tiếng cho hạn mức được đặt lại"
+    info "  3) Dùng MySQL và S3 có sẵn của công ty:  ./scripts/setup.sh --external"
+  else
+    info "Kiểm tra mạng và proxy của máy, rồi chạy lại script."
+  fi
+  return 1
+}
+
+# Tải trước từng ảnh MỘT, thay vì để 'compose up' tải cả loạt.
+# Compose tải song song và huỷ hết khi một ảnh lỗi, nên chỉ thấy "Interrupted"
+# mà không biết ảnh nào mới thật sự hỏng.
+pull_images() {
+  local file="$1" img missing=0 list
+  list=$(images_for "$file" || true)
+  [[ -z "$list" ]] && return 0
+
+  step "Tải ảnh nền"
+  while read -r img; do
+    [[ -z "$img" ]] && continue
+    if $DOCKER_SUDO docker image inspect "$img" >/dev/null 2>&1; then
+      ok "$img (đã có sẵn)"
+      continue
+    fi
+    pull_one "$img" || missing=1
+  done <<< "$list"
+  return $missing
+}
+
+# Giải nén thiếu thư mục thì Docker báo lỗi rất khó hiểu ("failed to compute
+# cache key"). Soát trước để nói thẳng thiếu cái gì.
+check_files() {
+  step "Soát mã nguồn"
+  local missing=0 path
+  for path in Dockerfile requirements.txt app templates static scripts; do
+    if [[ -e "$ROOT/$path" ]]; then
+      ok "$path"
+    else
+      fail "Thiếu $path"
+      missing=1
+    fi
+  done
+
+  (( missing == 0 )) || die "Giải nén lại bản tải về rồi chạy lại script."
+}
+
 start_stack() {
   local file="$1"
+
+  check_files
+  pull_images "$file" || die "Thiếu ảnh nền, chưa khởi động được."
+
   step "Dựng ảnh Docker"
   info "Lần đầu mất vài phút để tải ảnh nền và cài thư viện."
   compose "$file" build --quiet 2>&1 | tail -3 || compose "$file" build

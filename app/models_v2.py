@@ -270,3 +270,33 @@ class Photo(Base):
     image_key: Mapped[str] = mapped_column(String(1024), nullable=False)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
+
+
+class StockLocation(Base):
+    """
+    Chỗ để của một mặt hàng trong kho: "Kệ A3", "Tầng 2 — ô 12"…
+
+    Vị trí thuộc về MẶT HÀNG chứ không thuộc từng phiếu nhập: cùng một món thì
+    lô sau vẫn xếp đúng chỗ lô trước. Khoá theo đúng cặp (tên sản phẩm, model)
+    mà tồn kho đang gom nhóm.
+
+    Ảnh để một cột `image_key` thẳng ở đây, không dùng bảng `photos` chung: bảng
+    đó phân loại bằng cột ENUM, thêm một loại chủ sở hữu mới là phải ALTER bảng
+    đang có dữ liệu thật. Một tấm ảnh chụp chỗ để là đủ.
+    """
+    __tablename__ = "stock_locations"
+    __table_args__ = (
+        UniqueConstraint("product_name", "model_code", name="uq_location_product"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    model_code: Mapped[str] = mapped_column(String(120), nullable=False)
+
+    location: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    image_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.now())

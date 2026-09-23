@@ -14,7 +14,6 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from ..config import settings
 from ..db import SessionLocal
 from . import loan_service, mail_service
 

@@ -35,7 +35,8 @@ bản hướng dẫn sử dụng.
 | **Mượn / trả** | Một phiếu nhiều máy. Không có hạn trả, quá 10 ngày thì cảnh báo |
 | **Trả từng máy** | Bấm một máy là trả riêng máy đó, có ô ghi chú riêng cho từng máy |
 | **Nhập / xuất** | Hàng mua về để BÁN, tách hẳn khỏi kho cho mượn. Ghi rõ ai nhập, ai xuất |
-| **Tem QR** | Mỗi máy một mã QR in được, quét vào là máy nhảy thẳng vào phiếu mượn |
+| **Kho hàng** | Bảng thống kê hàng đang lưu kho: số lượng · ngày nhập · vị trí kho kèm ảnh chỗ để · tồn · đã xuất · còn lại |
+| **Tem QR** | Tem 50×30mm in trên decal 2 tem khổ 98mm (Godex Z530), quét vào là máy nhảy thẳng vào phiếu mượn |
 | **Bảo trì** | Máy hỏng chuyển sang bảo trì, xong thì quay lại kho |
 | **Nhân sự** | Phòng ban → nhân viên. Mỗi phòng có một trưởng bộ phận nhận email |
 | **Phân quyền** | 7 nhóm × 4 thao tác = 28 quyền, giao diện tự ẩn phần không có quyền |
@@ -57,7 +58,7 @@ Bốn loại, không loại nào lặp lại hằng ngày:
 ./scripts/healthcheck.sh                              # soát lại hệ thống
 ./scripts/backup.sh                                   # sao lưu database + ảnh
 python3 scripts/create-admin.py --user admin --reset  # quên mật khẩu admin
-pytest -q                                             # 55 test
+pytest -q                                             # 71 test
 ```
 
 ## Kiến trúc

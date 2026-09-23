@@ -86,11 +86,3 @@ def signed_url(key: str) -> str:
     except Exception:
         logger.warning("Không ký được URL cho key %s", key, exc_info=True)
         return public_s3_url(key)
-
-
-def delete_photo(db: Session, photo_id: int) -> bool:
-    p = db.get(Photo, photo_id)
-    if not p:
-        return False
-    db.delete(p)
-    return True

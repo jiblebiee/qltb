@@ -248,6 +248,17 @@ class StockLevelOut(BaseModel):
     imported: int
     exported: int
     on_hand: int
+    last_in: datetime | None = None
+    location: str | None = None
+    image_url: str | None = None
+
+
+class LocationUpdate(BaseModel):
+    product_name: str = Field(min_length=1, max_length=255)
+    model_code: str = Field(min_length=1, max_length=120)
+    location: str | None = Field(default=None, max_length=160)
+    image_key: str | None = Field(default=None, max_length=1024)
+    note: str | None = None
 
 
 # ------------------------------------------------------------------ tổ chức

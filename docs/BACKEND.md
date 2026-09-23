@@ -9,7 +9,7 @@ cp .env.example .env          # điền DB_URL, APP_SECRET_KEY, S3, SMTP
 python -c "import secrets; print(secrets.token_urlsafe(64))"   # sinh APP_SECRET_KEY
 
 pip install -r requirements.txt
-pytest -q                     # 55 test nghiệp vụ
+pytest -q                     # 71 test nghiệp vụ
 uvicorn app.main:app --reload
 ```
 
@@ -36,6 +36,7 @@ chạy trên bộ bảng riêng:
 | `unit_returns` | Nhật ký nhận trả, **một dòng một máy**, có `note` riêng |
 | `unit_maintenances` | Lịch bảo trì gắn với một máy |
 | `stock_imports` / `stock_exports` | Kho hàng bán, tách hẳn khỏi thiết bị cho mượn |
+| `stock_locations` | Chỗ để và ảnh chỗ để của một mặt hàng trong kho |
 | `photos` | Ảnh dùng chung, phân biệt bằng `(owner_type, owner_id)` |
 
 Thêm một cột vào bảng cũ: `departments.head_staff_id` — trưởng bộ phận.
@@ -203,14 +204,18 @@ Tất cả dưới `/api/v2`, đều yêu cầu đăng nhập.
 
 ## Kiểm thử
 
-`pytest -q` — 55 test phủ: sinh mã máy, dò từ khoá hư hại (kể cả các trường hợp
+`pytest -q` — 71 test phủ: sinh mã máy, dò từ khoá hư hại (kể cả các trường hợp
 dễ bắt nhầm), chặn mượn trùng, trả một phần, ghi chú riêng theo máy, ngưỡng 10
 ngày, chỉ gửi cảnh báo quá hạn đúng một lần, trưởng bộ phận nhận email,
 bộ 28 quyền, nhập Excel (7 test, có ca ô trống không được thành loại "NAN"),
 tạo tài khoản (6 test), đặt lại mật khẩu 6 ký tự (3 test), phòng cho mượn được
 tạo sẵn và không nhân đôi (2 test), và ngày mượn — mặc định, lùi ngày, chặn
 ngày tương lai (3 test), và tem QR — SVG đứng một mình phải có xmlns, mỗi máy
-một tem, chặn người không có quyền xem (5 test).
+một tem, xếp đúng 2 tem một hàng trên giấy 98mm, tem chỉ in tên chứ không in mã,
+in toàn bộ phải xác nhận trước, chặn người không có quyền xem (10 test), tự tạo bucket ảnh — tạo
+khi thiếu, bỏ qua khi đã có, không ném lỗi khi kho ảnh chết (3 test), và bảng
+điều khiển kho — nhập/xuất/tồn, đếm hết hàng và sắp hết, gom nhập xuất theo
+tháng, lịch sử ra vào của một mặt hàng (6 test).
 
 Ngoài ra có bộ kiểm tra API qua HTTP thật, 46 mục, chạy hết trong quá trình bàn
 giao — bao gồm cả các bản vá leo thang đặc quyền.

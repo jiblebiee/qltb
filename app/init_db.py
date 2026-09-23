@@ -11,7 +11,8 @@ import logging
 
 from sqlalchemy import inspect, text
 
-from . import models, models_v2  # noqa: F401  — nạp để create_all thấy mọi bảng
+# Nạp để hai module tự đăng ký bảng vào Base; trông thừa nhưng bỏ là mất bảng.
+from . import models, models_v2  # noqa: F401
 from .db import Base, engine
 
 logger = logging.getLogger(__name__)

@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session, selectinload
 from .. import schemas_v2 as sc
 from ..config import settings
 from ..db import get_db
-from ..models import Department, Staff
+from ..models import Staff
 from ..models_v2 import (
-    DeviceModel, DeviceUnit, LoanTicket, LoanTicketItem, Photo, PhotoOwner, UnitReturn,
+    DeviceUnit, LoanTicket, LoanTicketItem, PhotoOwner, UnitReturn,
 )
 from ..security import require_perm
 from ..services import loan_service, mail_service

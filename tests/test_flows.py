@@ -34,8 +34,7 @@ os.environ.update({
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.models import Department, Staff, StaffStatus, User  # noqa: E402
 from app.models_v2 import (  # noqa: E402
-    DeviceModel, DeviceUnit, MaintStatus, ReturnCondition, UnitMaintenance,
-    UnitReturn, UnitStatus,
+    DeviceModel, DeviceUnit, MaintStatus, UnitMaintenance, UnitReturn, UnitStatus,
 )
 from app.security import PERMISSIONS_ALL, normalize_permissions, parse_permissions  # noqa: E402
 from app.services import issue_service, loan_service, unit_service  # noqa: E402
@@ -766,20 +765,65 @@ def test_unit_labels_cover_every_machine(admin_client, db, world):
     res = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels")
     assert res.status_code == 200
     page = res.text
-    assert page.count('class="lb"') == 5           # 5 cuộn quang trong world
+    assert page.count('class="lb"') == 5           # 5 cuộn quang
+    assert page.count('class="lb blank"') == 1     # ô trống bù cho hàng lẻ
     for n in range(1, 6):
         assert f"QUANG-0{n}" in page
 
 
-def test_model_label_prints_one_ticket(admin_client, db, world):
+def test_labels_are_laid_out_two_per_feed(admin_client, db, world):
+    """Giấy decal 2 tem: mỗi hàng đúng 2 ô, mỗi hàng là một trang giấy."""
+    page = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels").text
+    assert page.count('class="row"') == 3          # 5 tem → 3 lần đẩy giấy
+    assert "@page { size: 98.0mm 30.0mm; margin: 0; }" in page
+    assert "page-break-after:always" in page
+
+
+def test_label_prints_only_the_device_name(admin_client, db, world):
+    """Chữ trên tem chỉ có TÊN thiết bị. Mã nằm trong QR, không in ra."""
+    page = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels").text
+    assert "<b>Cuộn quang 6 đầu</b>" in page
+    body = page.split('<div class="sheet">', 1)[1]
+    assert "QUANG-01" not in body.replace('title="QUANG-01"', "")   # trừ tooltip xem trước
+
+
+def test_model_label_fills_one_whole_feed(admin_client, db, world):
+    """Tem mã loại in đúng một lần đẩy giấy — hai tem giống nhau, không bỏ phí."""
     res = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels?kind=model")
     assert res.status_code == 200
-    assert res.text.count('class="lb"') == 1
+    assert res.text.count('class="lb"') == 2
+    assert res.text.count('class="row"') == 1
+    assert "lb blank" not in res.text
 
 
 def test_labels_reject_unknown_kind(admin_client, db, world):
     res = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels?kind=xyz")
     assert res.status_code == 422
+
+
+def test_printing_everything_asks_first(admin_client, db, world):
+    """In toàn bộ là việc chạy liên tục — trang phải bắt tick xác nhận đã."""
+    res = admin_client.get("/api/v2/devices/labels/all")
+    assert res.status_code == 200
+    assert 'id="ok"' in res.text                   # ô tick xác nhận
+    assert "disabled" in res.text                  # nút In khoá cho tới khi tick
+    assert "In liên tục" in res.text
+
+
+def test_label_count_is_reported_before_printing(admin_client, db, world):
+    """Giao diện hỏi lại bằng con số thật, không bắt người dùng đoán."""
+    data = admin_client.get("/api/v2/devices/labels/count").json()
+    assert data["units"] == 5
+    assert data["per_row"] == 2
+    assert data["feeds"] == 3                      # 5 tem chia 2, làm tròn lên
+    assert data["length_cm"] == 9.0                # 3 lần đẩy × 30mm
+
+
+def test_small_label_job_prints_without_confirmation(admin_client, db, world):
+    """Vài tem thì không bắt tick — hỏi han chuyện nhỏ chỉ làm phiền."""
+    page = admin_client.get(f"/api/v2/devices/models/{world['model'].id}/labels").text
+    assert 'id="ok"' not in page
+    assert "In liên tục" not in page
 
 
 def test_labels_need_view_permission(db):
@@ -790,3 +834,173 @@ def test_labels_need_view_permission(db):
     _login(client, "khongquyen")
     assert client.get("/api/v2/devices/models/1/labels").status_code == 403
     assert client.get("/api/v2/devices/models/1/qr.svg").status_code == 403
+
+
+# ---------------------------------------------------------------- kho ảnh
+
+def test_ensure_bucket_creates_it_when_missing(monkeypatch):
+    """
+    Ứng dụng tự tạo bucket, không cần container minio/mc nữa.
+
+    Container đó là một ảnh Docker phải tải thêm, và chính nó hay bị Docker Hub
+    chặn làm cả hệ thống không dựng lên được.
+    """
+    from app import s3 as s3mod
+
+    calls = {"head": 0, "create": 0}
+
+    class FakeClient:
+        def head_bucket(self, Bucket):
+            calls["head"] += 1
+            raise RuntimeError("404 chưa có")
+
+        def create_bucket(self, **kw):
+            calls["create"] += 1
+            assert kw["Bucket"] == s3mod.settings.s3_bucket
+            return {}
+
+    monkeypatch.setattr(s3mod, "s3_client", lambda: FakeClient())
+    assert s3mod.ensure_bucket() is True
+    assert calls == {"head": 1, "create": 1}
+
+
+def test_ensure_bucket_is_a_no_op_when_it_already_exists(monkeypatch):
+    from app import s3 as s3mod
+
+    calls = {"create": 0}
+
+    class FakeClient:
+        def head_bucket(self, Bucket):
+            return {}
+
+        def create_bucket(self, **kw):           # pragma: no cover - không được gọi
+            calls["create"] += 1
+
+    monkeypatch.setattr(s3mod, "s3_client", lambda: FakeClient())
+    assert s3mod.ensure_bucket() is True
+    assert calls["create"] == 0
+
+
+def test_ensure_bucket_never_raises_when_storage_is_down(monkeypatch):
+    """Kho ảnh chết thì mượn trả vẫn phải chạy — không được ném lỗi ra ngoài."""
+    from app import s3 as s3mod
+
+    def boom():
+        raise ConnectionError("MinIO chưa lên")
+
+    monkeypatch.setattr(s3mod, "s3_client", boom)
+    assert s3mod.ensure_bucket() is False
+
+
+# ---------------------------------------------------------------- bảng điều khiển kho
+
+def _stock(admin_client, name, code, *, qty, kind="in", when=None, **extra):
+    body = {"product_name": name, "model_code": code, "qty": qty, **extra}
+    if kind == "in":
+        body.setdefault("brand", "ACME")
+        body.setdefault("condition", "Hàng mới")
+        if when:
+            body["imported_at"] = when.isoformat()
+        res = admin_client.post("/api/v2/stock/imports", json=body)
+    else:
+        body.setdefault("purpose", "Bán")
+        if when:
+            body["exported_at"] = when.isoformat()
+        res = admin_client.post("/api/v2/stock/exports", json=body)
+    assert res.status_code == 201, res.text
+    return res.json()
+
+
+def test_stock_levels_report_in_out_and_on_hand(admin_client, db):
+    """Ba con số của một mặt hàng: đã nhập, đã xuất, còn tồn."""
+    _stock(admin_client, "Chuột Logitech", "M331", qty=40)
+    _stock(admin_client, "Chuột Logitech", "M331", qty=10)
+    _stock(admin_client, "Chuột Logitech", "M331", qty=12, kind="out")
+
+    rows = admin_client.get("/api/v2/stock/levels").json()
+    row = next(r for r in rows if r["model_code"] == "M331")
+    assert (row["imported"], row["exported"], row["on_hand"]) == (50, 12, 38)
+
+
+def test_summary_counts_out_of_stock_and_low_stock(admin_client, db):
+    _stock(admin_client, "Hàng hết", "H0", qty=5)
+    _stock(admin_client, "Hàng hết", "H0", qty=5, kind="out")      # còn 0
+    _stock(admin_client, "Hàng sắp hết", "H1", qty=10)
+    _stock(admin_client, "Hàng sắp hết", "H1", qty=8, kind="out")  # còn 2
+    _stock(admin_client, "Hàng đủ", "H2", qty=30)
+
+    s = admin_client.get("/api/v2/stock/summary").json()
+    assert s["imported"] == 45 and s["exported"] == 13 and s["on_hand"] == 32
+    assert s["products"] == 3
+    assert s["out_of_stock"] == 1                 # H0
+    assert s["low_stock"] == 1                    # H1, còn 2 ≤ ngưỡng 3
+    assert s["low_threshold"] >= 1
+
+
+def test_levels_report_latest_import_date(admin_client, db):
+    """Cột ngày nhập lấy lần nhập GẦN NHẤT, không phải lần đầu."""
+    now = datetime.utcnow().replace(hour=9, minute=0, second=0, microsecond=0)
+    old, new = now - timedelta(days=40), now - timedelta(days=2)
+    _stock(admin_client, "Dây HDMI", "HD5", qty=11, when=old)
+    _stock(admin_client, "Dây HDMI", "HD5", qty=20, when=new)
+
+    row = next(r for r in admin_client.get("/api/v2/stock/levels").json()
+               if r["model_code"] == "HD5")
+    assert row["imported"] == 31
+    assert row["last_in"][:10] == new.date().isoformat()
+
+
+def test_set_location_is_upsert_and_shows_on_levels(admin_client, db):
+    """Khai vị trí kho: gọi lần hai là sửa chứ không đẻ thêm dòng."""
+    _stock(admin_client, "Màn hình Dell", "P2422", qty=6)
+    body = {"product_name": "Màn hình Dell", "model_code": "P2422",
+            "location": "Kệ A3", "image_key": "stock_place/a3.jpg"}
+
+    assert admin_client.put("/api/v2/stock/location", json=body).status_code == 200
+    body["location"] = "Kệ B1"
+    saved = admin_client.put("/api/v2/stock/location", json=body).json()
+    assert saved["location"] == "Kệ B1"
+
+    rows = [r for r in admin_client.get("/api/v2/stock/levels").json()
+            if r["model_code"] == "P2422"]
+    assert len(rows) == 1
+    assert rows[0]["location"] == "Kệ B1" and rows[0]["image_url"]
+
+
+def test_set_location_rejects_unknown_product(admin_client, db):
+    res = admin_client.put("/api/v2/stock/location", json={
+        "product_name": "Không có", "model_code": "X", "location": "Kệ A"})
+    assert res.status_code == 404
+
+
+def test_product_history_lists_every_movement(admin_client, db):
+    """Một mặt hàng đã vào ra những lần nào, ai lập, đi đâu."""
+    _stock(admin_client, "Bàn phím K3", "K3", qty=25)
+    _stock(admin_client, "Bàn phím K3", "K3", qty=4, kind="out",
+           purpose="Bảo hành", destination="Phòng Kế toán")
+
+    d = admin_client.get("/api/v2/stock/product",
+                         params={"name": "Bàn phím K3", "code": "K3"}).json()
+    assert (d["imported"], d["exported"], d["on_hand"]) == (25, 4, 21)
+    assert [m["kind"] for m in d["moves"]] == ["OUT", "IN"]      # mới nhất lên đầu
+    out = d["moves"][0]
+    assert out["qty"] == 4 and out["detail"] == "Bảo hành" and out["to"] == "Phòng Kế toán"
+    assert out["who"]                                            # có tên người lập
+
+
+def test_product_history_404_for_unknown_item(admin_client, db):
+    res = admin_client.get("/api/v2/stock/product",
+                           params={"name": "Không có", "code": "X"})
+    assert res.status_code == 404
+
+
+def test_stock_dashboard_needs_import_export_permission(db):
+    from app.main import app
+    _mk_user(db, "khongkho", ["loan.devices.view"])
+    client = TestClient(app)
+    _login(client, "khongkho")
+    for path in ("/api/v2/stock/levels", "/api/v2/stock/summary",
+                 "/api/v2/stock/product?name=a&code=b"):
+        assert client.get(path).status_code == 403, path
+    assert client.put("/api/v2/stock/location", json={
+        "product_name": "a", "model_code": "b"}).status_code == 403

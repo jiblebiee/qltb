@@ -119,23 +119,32 @@ def model_qr(model_id: int, db: Session = Depends(get_db)):
                     headers={"Cache-Control": "private, max-age=86400"})
 
 
+# In tem nhiều hơn ngần này thì trang tem bắt xác nhận trước khi mở hộp thoại in
+CONTINUOUS_WARN_FROM = 10
+
+
 @router.get("/models/{model_id}/labels", response_class=HTMLResponse,
             dependencies=[Depends(require_perm("loan.devices.view"))])
 def model_labels(model_id: int, kind: str = Query(default="units", pattern="^(units|model)$"),
                  db: Session = Depends(get_db)):
     """
-    Tờ tem QR in được, mở thẳng trong trình duyệt rồi Ctrl+P.
+    Tờ tem QR in được, mở thẳng trong trình duyệt rồi bấm In.
 
-    `kind=units` — mỗi máy một tem mang mã riêng (LAP-01, LAP-02…). Đây là loại
-    tem dán lên máy, quét vào là thêm đúng máy đó vào phiếu.
-    `kind=model` — một tem mang mã loại, dán lên thùng hoặc kệ chứa cả lô.
+    Giấy decal 2 tem khổ 98mm (mỗi tem 50 × 30mm), máy in Godex Z530 — mỗi lần
+    đẩy giấy ra hai tem, nên trang được dựng đúng một hàng bằng một trang giấy.
+
+    `kind=units` — mỗi máy một tem mang mã riêng (LAP-01, LAP-02…). Đây là tem
+    dán lên máy, quét vào là thêm đúng máy đó vào phiếu.
+    `kind=model` — hai tem giống nhau mang mã loại, vừa đúng một lần đẩy giấy,
+    dán lên thùng hoặc kệ chứa cả lô.
     """
     m = db.get(DeviceModel, model_id)
     if not m:
         raise HTTPException(404, "Không tìm thấy loại thiết bị")
 
     if kind == "model":
-        rows = [(m.code, m.name)]
+        # Đúng một lần đẩy giấy: hai tem giống hệt nhau
+        rows = [(m.code, m.name)] * label_service.PER_ROW
         heading = f"{m.name} · mã loại"
     else:
         units = db.execute(
@@ -146,7 +155,43 @@ def model_labels(model_id: int, kind: str = Query(default="units", pattern="^(un
         rows = [(u.code, m.name) for u in units]
         heading = m.name
 
-    return HTMLResponse(label_service.labels_html(rows, heading=heading))
+    return HTMLResponse(label_service.labels_html(
+        rows, heading=heading, warn_continuous=len(rows) > CONTINUOUS_WARN_FROM))
+
+
+@router.get("/labels/count",
+            dependencies=[Depends(require_perm("loan.devices.view"))])
+def labels_count(db: Session = Depends(get_db)):
+    """
+    Đếm trước khi in toàn bộ, để giao diện hỏi lại người dùng bằng con số thật
+    chứ không bắt họ đoán sẽ tốn bao nhiêu giấy.
+    """
+    total = db.execute(select(func.count(DeviceUnit.id))).scalar_one()
+    per = label_service.PER_ROW
+    feeds = (total + per - 1) // per
+    return {
+        "units": total,
+        "feeds": feeds,
+        "per_row": per,
+        "length_cm": round(feeds * label_service.LABEL_H_MM / 10, 1),
+    }
+
+
+@router.get("/labels/all", response_class=HTMLResponse,
+            dependencies=[Depends(require_perm("loan.devices.view"))])
+def all_labels(db: Session = Depends(get_db)):
+    """Tem của TOÀN BỘ máy trong hệ thống, xếp theo loại rồi theo số máy."""
+    pairs = db.execute(
+        select(DeviceUnit.code, DeviceModel.name)
+        .join(DeviceModel, DeviceModel.id == DeviceUnit.model_id)
+        .order_by(DeviceModel.name, DeviceUnit.no)
+    ).all()
+    if not pairs:
+        raise HTTPException(400, "Chưa có máy nào trong hệ thống để in tem")
+
+    rows = [(code, name) for code, name in pairs]
+    return HTMLResponse(label_service.labels_html(
+        rows, heading="Toàn bộ thiết bị", warn_continuous=True))
 
 
 @router.post("/models", response_model=sc.ModelDetailOut, status_code=201,

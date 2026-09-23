@@ -14,8 +14,8 @@ const NAV_ITEMS = [
     icon: 'M4 6h16M4 12h10M4 18h7M20 15l-3 3 3 3' },
   { key: 'devices', label: 'Thiết bị', perms: ['loan.devices.view'],
     icon: 'M4 5h16v11H4zM8 20h8M12 16v4' },
-  { key: 'stock', label: 'Nhập / Xuất', perms: ['import_export.view'],
-    icon: 'M3 8l9-5 9 5v9l-9 5-9-5zM3 8l9 5 9-5M12 13v9' },
+  { key: 'warehouse', label: 'Kho hàng', perms: ['import_export.view'],
+    icon: 'M3 21V9l9-6 9 6v12M3 21h18M9 21v-6h6v6M6.5 12h2M15.5 12h2' },
   { key: 'more', label: 'Thêm', perms: null, icon: 'M4 7h16M4 12h16M4 17h16' },
 ];
 
@@ -30,6 +30,8 @@ const SIDE_GROUPS = [
       icon: 'M4 6h16M4 12h10M4 18h7M20 15l-3 3 3 3' },
     { key: 'devices', label: 'Thiết bị', perms: ['loan.devices.view'],
       icon: 'M4 5h16v11H4zM8 20h8M12 16v4' },
+    { key: 'warehouse', label: 'Kho hàng', perms: ['import_export.view'],
+      icon: 'M3 21V9l9-6 9 6v12M3 21h18M9 21v-6h6v6M6.5 12h2M15.5 12h2' },
     { key: 'stock', label: 'Nhập / Xuất', perms: ['import_export.view'],
       icon: 'M3 8l9-5 9 5v9l-9 5-9-5zM3 8l9 5 9-5M12 13v9' },
   ] },
@@ -52,7 +54,8 @@ const SIDE_GROUPS = [
 const TITLES = {
   loans: ['Mượn - Trả', 'Phiếu mượn và nhận trả từng máy'],
   devices: ['Thiết bị cho mượn', 'Quản lý theo từng máy có mã riêng'],
-  stock: ['Nhập / Xuất kho', 'Hàng hoá kinh doanh — nhập về để bán'],
+  warehouse: ['Kho hàng', 'Hàng hoá đang lưu kho'],
+  stock: ['Nhập / Xuất kho', 'Lập phiếu nhập và phiếu xuất'],
   more: ['Thêm', 'Danh mục và cấu hình hệ thống'],
   staff: ['Nhân sự', 'Ai đang giữ máy nào'],
   depts: ['Phòng ban', 'Trưởng bộ phận nhận email thông báo'],
@@ -65,6 +68,7 @@ const RENDERERS = {
   home: renderHome,
   loans: renderLoans,
   devices: renderDevices,
+  warehouse: renderWarehouse,
   stock: renderStock,
   more: renderMore,
   staff: renderStaffScreen,
@@ -77,6 +81,7 @@ const RENDERERS = {
 const SCREEN_PERMS = {
   loans: ['loan.loans.view'],
   devices: ['loan.devices.view'],
+  warehouse: ['import_export.view'],
   stock: ['import_export.view'],
   staff: ['loan.staff.view'],
   depts: ['loan.departments.view'],

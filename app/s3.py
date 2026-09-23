@@ -1,4 +1,4 @@
-from fastapi import UploadFile
+import logging
 import os
 import uuid
 from functools import lru_cache
@@ -7,6 +7,8 @@ import boto3
 from botocore.config import Config
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -62,29 +64,6 @@ def presign_put(filename: str, content_type: str) -> tuple[str, str]:
     )
     return key, url
 
-def presign_get(key: str) -> str:
-    cli = s3_client()
-    url = cli.generate_presigned_url(
-        ClientMethod="get_object",
-        Params={"Bucket": settings.s3_bucket, "Key": key},
-        ExpiresIn=settings.presign_expires,
-    )
-    return url
-
-
-
-def upload_file_to_s3(file: UploadFile) -> str:
-    """Upload a FastAPI UploadFile to S3 and return the stored object key."""
-    key = make_object_key(file.filename or "upload")
-    cli = s3_client()
-    cli.upload_fileobj(
-        file.file,
-        settings.s3_bucket,
-        key,
-        ExtraArgs={"ContentType": file.content_type or "application/octet-stream"},
-    )
-    return key
-
 
 def public_s3_url(key: str) -> str:
     """Build a public URL for object if endpoint supports public access."""
@@ -105,3 +84,48 @@ def presigned_get_url(key: str) -> str:
         Params={"Bucket": settings.s3_bucket, "Key": key},
         ExpiresIn=settings.presign_expires,
     )
+
+
+def ensure_bucket() -> bool:
+    """
+    Tạo bucket nếu chưa có.
+
+    Trước đây việc này do một container `minio/mc` chạy một lần rồi thoát lo.
+    Bỏ đi vì nó bắt phải tải thêm một ảnh Docker nữa — mà đúng cái ảnh đó hay
+    bị Docker Hub chặn khi máy vượt hạn mức tải ẩn danh, làm cả hệ thống không
+    dựng lên được chỉ vì một lệnh tạo thư mục.
+
+    Chạy lại bao nhiêu lần cũng được: đã có bucket thì không làm gì.
+    Kho ảnh chưa kịp lên thì trả False, gọi lại sau là xong — không được ném
+    lỗi ra ngoài, vì phần còn lại của hệ thống không phụ thuộc kho ảnh.
+    """
+    bucket = (settings.s3_bucket or "").strip()
+    if not bucket:
+        return False
+    try:
+        client = s3_client()
+        client.head_bucket(Bucket=bucket)
+        return True
+    except Exception:
+        pass
+
+    try:
+        client = s3_client()
+        region = (settings.s3_region or "").strip()
+        # MinIO và us-east-1 không nhận LocationConstraint, các vùng khác thì bắt buộc
+        if region and region != "us-east-1":
+            client.create_bucket(
+                Bucket=bucket,
+                CreateBucketConfiguration={"LocationConstraint": region},
+            )
+        else:
+            client.create_bucket(Bucket=bucket)
+        logger.info("Đã tạo bucket %s", bucket)
+        return True
+    except Exception as exc:
+        name = type(exc).__name__
+        # Người khác vừa tạo trước, hoặc bucket đã có sẵn — coi như xong
+        if "BucketAlreadyOwnedByYou" in name or "BucketAlreadyExists" in name:
+            return True
+        logger.warning("Chưa tạo được bucket %s: %s", bucket, exc)
+        return False

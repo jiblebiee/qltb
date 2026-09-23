@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import HTTPException, Request
 
 # 7 nhóm × 4 hành động = 28 quyền
 PERMISSION_GROUPS: list[tuple[str, str]] = [
@@ -105,10 +105,3 @@ def require_perm(*needed: str):
         raise HTTPException(status_code=403, detail="Bạn không có quyền thực hiện thao tác này")
 
     return _dep
-
-
-def require_admin(request: Request) -> int:
-    uid = current_user_id(request)
-    if not is_admin(request):
-        raise HTTPException(status_code=403, detail="Chỉ quản trị viên mới thực hiện được")
-    return uid

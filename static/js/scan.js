@@ -6,7 +6,8 @@
    1. BarcodeDetector — có sẵn trong Chrome / Edge / trình duyệt Android.
       Nhanh nhất, đọc được cả QR lẫn mã vạch một chiều.
    2. jsQR — thư viện nằm ngay trong máy chủ, không gọi ra Internet. Chỉ đọc
-      QR nhưng chạy được ở mọi trình duyệt.
+      QR nhưng chạy được ở mọi trình duyệt. Nó nặng 130KB nên CHỈ được tải về
+      đúng lúc bấm quét lần đầu, không nằm trong mỗi lần mở trang.
    3. Chụp một tấm ảnh rồi giải mã — dùng khi trang chạy trên http:// chứ
       không phải https://. Trình duyệt CHẶN camera trực tiếp ở http, nhưng ô
       chọn tệp có capture thì vẫn mở được camera. Chậm hơn một nhịp, đổi lại
@@ -22,6 +23,25 @@ const Scan = {
   lastText: '',
   lastAt: 0,
 
+  jsqrLoading: null,
+
+  /**
+   * Nạp jsQR lần đầu cần tới. Người không bao giờ quét thì không tốn 130KB.
+   * Máy đã có BarcodeDetector sẵn thì cũng không cần nạp.
+   */
+  loadJsQR() {
+    if (window.jsQR) return Promise.resolve(true);
+    if (this.jsqrLoading) return this.jsqrLoading;
+    this.jsqrLoading = new Promise((done) => {
+      const el = document.createElement('script');
+      el.src = '/static/js/vendor/jsqr.min.js?v=9';
+      el.onload = () => done(true);
+      el.onerror = () => done(false);
+      document.head.appendChild(el);
+    });
+    return this.jsqrLoading;
+  },
+
   /** Trang có được trình duyệt cho phép mở camera trực tiếp không. */
   canUseCamera() {
     return !!(window.isSecureContext && navigator.mediaDevices
@@ -36,7 +56,7 @@ const Scan = {
     this.onFound = onFound;
     this.lastText = '';
 
-    if (!this.canUseCamera()) { this.openPhotoFallback(); return; }
+    if (!this.canUseCamera()) { await this.loadJsQR(); this.openPhotoFallback(); return; }
 
     const box = $('scanner');
     box.classList.add('on');
@@ -68,6 +88,8 @@ const Scan = {
         });
       } catch (_) { this.detector = null; }
     }
+    // Không có bộ đọc sẵn của trình duyệt thì mới cần tới jsQR
+    if (!this.detector) await this.loadJsQR();
     this.loop();
   },
 
@@ -143,7 +165,10 @@ const Scan = {
   /** Giải mã một tấm ảnh chụp. Thử vài cỡ vì ảnh điện thoại rất lớn. */
   async decodePhoto(file) {
     if (!file) return;
-    if (!window.jsQR) { toast('Thiếu thư viện giải mã QR.', true); return; }
+    if (!window.jsQR && !(await this.loadJsQR())) {
+      toast('Không nạp được thư viện giải mã QR.', true);
+      return;
+    }
 
     const bitmap = await createImageBitmap(file).catch(() => null);
     if (!bitmap) { toast('Không đọc được ảnh vừa chụp.', true); return; }

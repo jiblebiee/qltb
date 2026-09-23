@@ -25,11 +25,6 @@ def email_is_enabled() -> bool:
     return bool(settings.smtp_enabled and settings.smtp_host and settings.mail_from)
 
 
-def default_alert_recipients() -> list[str]:
-    raw = settings.mail_alert_recipients or ""
-    return [item.strip() for item in raw.split(",") if item.strip()]
-
-
 def send_email(
     subject: str,
     body: str,
